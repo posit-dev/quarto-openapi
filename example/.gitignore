@@ -1,0 +1,6 @@
+api/index.qmd
+_site/
+.quarto/
+
+/.quarto/
+**/*.quarto_ipynb
