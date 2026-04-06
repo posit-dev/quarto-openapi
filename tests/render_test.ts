@@ -1,0 +1,181 @@
+import {
+  assertStringIncludes,
+} from "https://deno.land/std@0.224.0/assert/mod.ts";
+import {
+  groupByResource,
+  renderSection,
+} from "../_extensions/quarto-openapi/lib/sections.ts";
+import type { OpenAPISpec } from "../_extensions/quarto-openapi/lib/types.ts";
+
+function minimalSpec(paths: OpenAPISpec["paths"]): OpenAPISpec {
+  return {
+    openapi: "3.0.3",
+    info: { title: "Test", version: "1.0.0" },
+    paths,
+  };
+}
+
+function renderedSection(spec: OpenAPISpec, sectionIndex = 0): string {
+  const sections = groupByResource(spec);
+  return renderSection(spec, sections[sectionIndex]).join("\n");
+}
+
+Deno.test("renderSection: section heading uses tag name", () => {
+  const spec = minimalSpec({
+    "/v1/pets": {
+      get: {
+        operationId: "listPets",
+        summary: "List pets",
+        tags: ["Pets"],
+        responses: { "200": { description: "OK" } },
+      },
+    },
+  });
+
+  const output = renderedSection(spec);
+
+  assertStringIncludes(output, "## Pets");
+});
+
+Deno.test("renderSection: endpoint heading uses summary and operationId anchor", () => {
+  const spec = minimalSpec({
+    "/v1/pets": {
+      get: {
+        operationId: "listPets",
+        summary: "List all pets",
+        tags: ["Pets"],
+        responses: { "200": { description: "OK" } },
+      },
+    },
+  });
+
+  const output = renderedSection(spec);
+
+  assertStringIncludes(output, '### List all pets {id="listPets"}');
+  assertStringIncludes(output, "`GET /v1/pets`");
+});
+
+Deno.test("renderSection: deprecated endpoint shows callout", () => {
+  const spec = minimalSpec({
+    "/v1/old": {
+      get: {
+        operationId: "oldEndpoint",
+        summary: "Old endpoint",
+        deprecated: true,
+        responses: { "200": { description: "OK" } },
+      },
+    },
+  });
+
+  const output = renderedSection(spec);
+
+  assertStringIncludes(output, ".callout-warning");
+  assertStringIncludes(output, "deprecated");
+});
+
+Deno.test("renderSection: parameters rendered as grid table", () => {
+  const spec = minimalSpec({
+    "/v1/pets": {
+      get: {
+        operationId: "listPets",
+        summary: "List pets",
+        parameters: [
+          {
+            name: "limit",
+            in: "query",
+            description: "Max items",
+            schema: { type: "integer" },
+          },
+        ],
+        responses: { "200": { description: "OK" } },
+      },
+    },
+  });
+
+  const output = renderedSection(spec);
+
+  assertStringIncludes(output, "#### Parameters");
+  assertStringIncludes(output, "`limit`");
+  assertStringIncludes(output, "Max items");
+});
+
+Deno.test("renderSection: request body schema rendered", () => {
+  const spec = minimalSpec({
+    "/v1/pets": {
+      post: {
+        operationId: "createPet",
+        summary: "Create a pet",
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  name: { type: "string", description: "Pet name" },
+                },
+              },
+            },
+          },
+        },
+        responses: { "201": { description: "Created" } },
+      },
+    },
+  });
+
+  const output = renderedSection(spec);
+
+  assertStringIncludes(output, "#### Request body");
+  assertStringIncludes(output, "`name`");
+  assertStringIncludes(output, "Pet name");
+});
+
+Deno.test("renderSection: multiple responses render as tabset", () => {
+  const spec = minimalSpec({
+    "/v1/pets/{id}": {
+      get: {
+        operationId: "getPet",
+        summary: "Get a pet",
+        responses: {
+          "200": { description: "OK" },
+          "404": { description: "Not found" },
+        },
+      },
+    },
+  });
+
+  const output = renderedSection(spec);
+
+  assertStringIncludes(output, ".panel-tabset");
+  assertStringIncludes(output, "**200**: OK");
+  assertStringIncludes(output, "**404**: Not found");
+});
+
+Deno.test("renderSection: path-level parameters merged into operations", () => {
+  const spec: OpenAPISpec = {
+    openapi: "3.0.3",
+    info: { title: "Test", version: "1.0.0" },
+    paths: {
+      "/v1/pets/{id}": {
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "Pet ID",
+            schema: { type: "string" },
+          },
+        ],
+        get: {
+          operationId: "getPet",
+          summary: "Get a pet",
+          responses: { "200": { description: "OK" } },
+        },
+      },
+    },
+  };
+
+  const output = renderedSection(spec);
+
+  assertStringIncludes(output, "`id`");
+  assertStringIncludes(output, "Pet ID");
+});
