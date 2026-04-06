@@ -64,6 +64,17 @@ function resourceName(path: string): string {
 }
 
 /**
+ * Title-case a dash-separated string.
+ * "audit-logs" -> "Audit Logs"
+ */
+function titleCase(name: string): string {
+  return name
+    .split("-")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+/**
  * Group all paths in the spec into sections.
  *
  * When operations have tags, group by the first tag on each operation.
@@ -99,11 +110,11 @@ export function groupByResource(spec: OpenAPISpec): Section[] {
         operation.parameters = [...pathParams, ...opParams];
       }
 
-      // Determine section: first tag if present, otherwise path prefix.
+      // Determine section: first tag if present, otherwise title-cased path prefix.
       const sectionName =
         operation.tags && operation.tags.length > 0
           ? operation.tags[0]
-          : resourceName(path);
+          : titleCase(resourceName(path));
 
       if (!sectionMap.has(sectionName)) {
         sectionMap.set(sectionName, []);

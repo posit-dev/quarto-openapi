@@ -179,3 +179,20 @@ Deno.test("renderSection: path-level parameters merged into operations", () => {
   assertStringIncludes(output, "`id`");
   assertStringIncludes(output, "Pet ID");
 });
+
+Deno.test("renderSection: untagged fallback section heading is title-cased", () => {
+  const spec = minimalSpec({
+    "/v1/audit_logs": {
+      get: {
+        operationId: "listAuditLogs",
+        summary: "List audit logs",
+        responses: { "200": { description: "OK" } },
+      },
+    },
+  });
+
+  const output = renderedSection(spec);
+
+  // Path prefix "audit-logs" should render as "Audit Logs", not "audit-logs"
+  assertStringIncludes(output, "## Audit Logs");
+});

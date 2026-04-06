@@ -110,9 +110,9 @@ Deno.test("operations without tags fall back to path-prefix grouping", () => {
   const sections = groupByResource(spec);
 
   assertEquals(sections.length, 2);
-  assertEquals(sections[0].name, "content");
+  assertEquals(sections[0].name, "Content");
   assertEquals(sections[0].endpoints.length, 2);
-  assertEquals(sections[1].name, "board");
+  assertEquals(sections[1].name, "Board");
   assertEquals(sections[1].endpoints.length, 1);
 });
 
@@ -139,7 +139,7 @@ Deno.test("mixed spec: tagged and untagged operations coexist", () => {
 
   assertEquals(sections.length, 2);
   assertEquals(sections[0].name, "Content");
-  assertEquals(sections[1].name, "internal");
+  assertEquals(sections[1].name, "Internal");
 });
 
 Deno.test("tictactoe spec groups by tag Gameplay, not path board", () => {
