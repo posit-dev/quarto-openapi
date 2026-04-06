@@ -282,6 +282,8 @@ function renderRequestBody(
     lines.push("");
   }
 
+  if (!body.content) return lines;
+
   // Render the schema for each content type (usually just application/json)
   for (const [contentType, mediaType] of Object.entries(body.content)) {
     if (Object.keys(body.content).length > 1) {
@@ -331,7 +333,7 @@ function renderResponses(
     "::: {.panel-tabset}",
     "",
     ...tabs.flatMap((tab) => [
-      `## ${tab.label}`,
+      `##### ${tab.label}`,
       "",
       ...tab.content,
       "",

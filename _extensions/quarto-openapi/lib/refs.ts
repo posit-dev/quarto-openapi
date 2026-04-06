@@ -16,7 +16,9 @@ export function resolveRef(
   let current: unknown = spec;
   for (const segment of path) {
     if (typeof current !== "object" || current === null) return undefined;
-    current = (current as Record<string, unknown>)[segment];
+    // Unescape JSON Pointer tokens per RFC 6901: ~1 -> /, ~0 -> ~
+    const key = segment.replace(/~1/g, "/").replace(/~0/g, "~");
+    current = (current as Record<string, unknown>)[key];
   }
   return current as Record<string, unknown> | undefined;
 }

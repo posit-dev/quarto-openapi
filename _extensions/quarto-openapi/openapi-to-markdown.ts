@@ -12,7 +12,7 @@
  *     output: "api/index.qmd"
  */
 
-import { parse as parseYaml } from "https://deno.land/std@0.224.0/yaml/mod.ts";
+import { parse as parseYaml, stringify as stringifyYaml } from "https://deno.land/std@0.224.0/yaml/mod.ts";
 import { join, dirname, extname } from "https://deno.land/std@0.224.0/path/mod.ts";
 import type { OpenAPISpec } from "./lib/types.ts";
 import { groupByResource, renderSection } from "./lib/sections.ts";
@@ -100,12 +100,15 @@ async function main() {
   // Generate single page
   const lines: string[] = [];
 
-  // YAML frontmatter
+  // YAML frontmatter — use a proper serializer to avoid injection via title
+  const frontmatter = stringifyYaml({
+    title: spec.info.title,
+    toc: true,
+    "toc-depth": 3,
+    "toc-expand": 1,
+  }).trimEnd();
   lines.push("---");
-  lines.push(`title: "${spec.info.title}"`);
-  lines.push("toc: true");
-  lines.push("toc-depth: 3");
-  lines.push("toc-expand: 1");
+  lines.push(frontmatter);
   lines.push("---");
   lines.push("");
 
