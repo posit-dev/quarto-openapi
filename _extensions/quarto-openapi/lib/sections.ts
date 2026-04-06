@@ -10,6 +10,7 @@ import type {
   Parameter,
   RequestBody,
   Response,
+  Schema,
   HttpMethod,
 } from "./types.ts";
 import { HTTP_METHODS, isReference } from "./types.ts";
@@ -20,7 +21,6 @@ import {
   methodBadge,
   pathToAnchor,
   gridTable,
-  joinSections,
   type TableRow,
 } from "./markdown.ts";
 
@@ -64,16 +64,20 @@ function resourceName(path: string): string {
 }
 
 /**
- * Group all paths in the spec by resource prefix.
+ * Group all paths in the spec into sections.
+ *
+ * When operations have tags, group by the first tag on each operation.
+ * Sections appear in the order their tag is first encountered in the spec.
+ * Operations without tags fall back to path-prefix grouping.
  */
 export function groupByResource(spec: OpenAPISpec): Section[] {
+  // Use a Map to preserve insertion order (first-seen tag order).
   const sectionMap = new Map<string, Endpoint[]>();
 
   for (const [path, pathItem] of Object.entries(spec.paths)) {
     const resolved = isReference(pathItem)
       ? resolve<PathItem>(spec, pathItem)
       : pathItem;
-    const resource = resourceName(path);
 
     for (const method of HTTP_METHODS) {
       const operation = resolved[method];
@@ -95,16 +99,23 @@ export function groupByResource(spec: OpenAPISpec): Section[] {
         operation.parameters = [...pathParams, ...opParams];
       }
 
-      if (!sectionMap.has(resource)) {
-        sectionMap.set(resource, []);
+      // Determine section: first tag if present, otherwise path prefix.
+      const sectionName =
+        operation.tags && operation.tags.length > 0
+          ? operation.tags[0]
+          : resourceName(path);
+
+      if (!sectionMap.has(sectionName)) {
+        sectionMap.set(sectionName, []);
       }
-      sectionMap.get(resource)!.push({ method, path, operation });
+      sectionMap.get(sectionName)!.push({ method, path, operation });
     }
   }
 
-  // Sort sections alphabetically, endpoints by path then method
+  // Preserve insertion order (first-seen tag order).
+  // Sort endpoints within each section by path then method.
   const sections: Section[] = [];
-  for (const [name, endpoints] of [...sectionMap.entries()].sort()) {
+  for (const [name, endpoints] of sectionMap) {
     endpoints.sort((a, b) => {
       const pathCmp = a.path.localeCompare(b.path);
       if (pathCmp !== 0) return pathCmp;
@@ -117,25 +128,12 @@ export function groupByResource(spec: OpenAPISpec): Section[] {
 }
 
 /**
- * Format a resource name as a display title.
- * "content" -> "Content"
- * "audit-logs" -> "Audit Logs"
- * "system-checks" -> "System Checks"
- */
-function sectionTitle(name: string): string {
-  return name
-    .split("-")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-}
-
-/**
  * Render a section with a ## heading and ### per endpoint.
  */
 export function renderSection(spec: OpenAPISpec, section: Section): string[] {
   const lines: string[] = [];
 
-  lines.push(heading(2, sectionTitle(section.name)));
+  lines.push(heading(2, section.name));
   lines.push("");
 
   for (const endpoint of section.endpoints) {
@@ -235,9 +233,7 @@ function renderParameters(
 
     const rows: TableRow[] = params.map((param) => {
       const schema = param.schema
-        ? isReference(param.schema)
-          ? resolve(spec, param.schema)
-          : param.schema
+        ? resolve<Schema>(spec, param.schema)
         : undefined;
 
       const typeParts: string[] = [];

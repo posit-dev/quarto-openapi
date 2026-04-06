@@ -1,4 +1,4 @@
-import type { OpenAPISpec, Schema, Reference } from "./types.ts";
+import type { OpenAPISpec, Reference } from "./types.ts";
 import { isReference } from "./types.ts";
 
 /**
@@ -73,5 +73,5 @@ export function resolve<T>(
   spec: OpenAPISpec,
   obj: T | Reference,
 ): T {
-  return expandRefs(spec, obj);
+  return expandRefs(spec, obj) as T;
 }

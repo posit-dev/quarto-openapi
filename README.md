@@ -51,7 +51,6 @@ Endpoints are grouped by the first path segment after any version prefix. Parame
 | `/board`                | Board   |
 | `/board/{row}/{column}` | Board   |
 
-
 ## Example
 
 The `example/` directory contains a working project using the [Tic Tac Toe](https://learn.openapis.org/examples/v3.1/tictactoe.html) spec from the OpenAPI documentation.
@@ -122,4 +121,3 @@ quarto-openapi/
 ## Limitations
 
 - OpenAPI 3.x only. Swagger 2.0 specs are not supported. Use a tool like [swagger2openapi](https://github.com/Mermade/oas-kit/tree/main/packages/swagger2openapi) to convert.
-- No tag-based grouping. Sections are derived from URL path prefixes. OpenAPI `tags` are not used.
