@@ -123,10 +123,28 @@ export function groupByResource(spec: OpenAPISpec): Section[] {
     }
   }
 
-  // Preserve insertion order (first-seen tag order).
+  // Determine section order: use spec.tags when present, otherwise first-seen.
+  const orderedNames: string[] = [];
+  if (spec.tags && spec.tags.length > 0) {
+    for (const tag of spec.tags) {
+      if (sectionMap.has(tag.name)) {
+        orderedNames.push(tag.name);
+      }
+    }
+    // Append any tags not listed in spec.tags (first-seen order).
+    for (const name of sectionMap.keys()) {
+      if (!orderedNames.includes(name)) {
+        orderedNames.push(name);
+      }
+    }
+  } else {
+    orderedNames.push(...sectionMap.keys());
+  }
+
   // Sort endpoints within each section by path then method.
   const sections: Section[] = [];
-  for (const [name, endpoints] of sectionMap) {
+  for (const name of orderedNames) {
+    const endpoints = sectionMap.get(name)!;
     endpoints.sort((a, b) => {
       const pathCmp = a.path.localeCompare(b.path);
       if (pathCmp !== 0) return pathCmp;
