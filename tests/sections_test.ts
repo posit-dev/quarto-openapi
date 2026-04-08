@@ -142,6 +142,102 @@ Deno.test("mixed spec: tagged and untagged operations coexist", () => {
   assertEquals(sections[1].name, "Internal");
 });
 
+Deno.test("top-level tags array controls section order", () => {
+  const spec: OpenAPISpec = {
+    openapi: "3.0.3",
+    info: { title: "Test", version: "1.0.0" },
+    tags: [{ name: "Zebras" }, { name: "Aardvarks" }],
+    paths: {
+      "/v1/aardvarks": {
+        get: {
+          operationId: "listAardvarks",
+          summary: "List aardvarks",
+          tags: ["Aardvarks"],
+          responses: { "200": { description: "OK" } },
+        },
+      },
+      "/v1/zebras": {
+        get: {
+          operationId: "listZebras",
+          summary: "List zebras",
+          tags: ["Zebras"],
+          responses: { "200": { description: "OK" } },
+        },
+      },
+    },
+  };
+
+  const sections = groupByResource(spec);
+  const names = sections.map((s) => s.name);
+
+  // spec.tags puts Zebras first, even though Aardvarks is first-seen in paths
+  assertEquals(names, ["Zebras", "Aardvarks"]);
+});
+
+Deno.test("unused tags in spec.tags do not produce empty sections", () => {
+  const spec: OpenAPISpec = {
+    openapi: "3.0.3",
+    info: { title: "Test", version: "1.0.0" },
+    tags: [{ name: "Users" }, { name: "Archived" }, { name: "Content" }],
+    paths: {
+      "/v1/users": {
+        get: {
+          operationId: "listUsers",
+          summary: "List users",
+          tags: ["Users"],
+          responses: { "200": { description: "OK" } },
+        },
+      },
+      "/v1/content": {
+        get: {
+          operationId: "listContent",
+          summary: "List content",
+          tags: ["Content"],
+          responses: { "200": { description: "OK" } },
+        },
+      },
+    },
+  };
+
+  const sections = groupByResource(spec);
+  const names = sections.map((s) => s.name);
+
+  // "Archived" has no operations, so it should be omitted
+  assertEquals(names, ["Users", "Content"]);
+});
+
+Deno.test("operations with tags not in spec.tags appear at the end", () => {
+  const spec: OpenAPISpec = {
+    openapi: "3.0.3",
+    info: { title: "Test", version: "1.0.0" },
+    tags: [{ name: "Content" }],
+    paths: {
+      "/v1/users": {
+        get: {
+          operationId: "listUsers",
+          summary: "List users",
+          tags: ["Users"],
+          responses: { "200": { description: "OK" } },
+        },
+      },
+      "/v1/content": {
+        get: {
+          operationId: "listContent",
+          summary: "List content",
+          tags: ["Content"],
+          responses: { "200": { description: "OK" } },
+        },
+      },
+    },
+  };
+
+  const sections = groupByResource(spec);
+  const names = sections.map((s) => s.name);
+
+  // Content is in spec.tags so it comes first; Users is unlisted so it's appended
+  assertEquals(names, ["Content", "Users"]);
+});
+
 Deno.test("tictactoe spec groups by tag Gameplay, not path board", () => {
   const spec = minimalSpec({
     "/board": {
