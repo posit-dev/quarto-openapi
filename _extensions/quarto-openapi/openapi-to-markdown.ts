@@ -103,6 +103,8 @@ async function main() {
   // YAML frontmatter — use a proper serializer to avoid injection via title
   const frontmatter = stringifyYaml({
     title: spec.info.title,
+    "page-layout": "full",
+    "toc-location": "left",
     toc: true,
     "toc-depth": 3,
     "toc-expand": 1,
