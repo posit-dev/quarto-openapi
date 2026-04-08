@@ -1,13 +1,24 @@
-/* Prevent schema tables from overflowing into the sidebar */
-.quarto-openapi-table table {
-  table-layout: fixed;
-  width: 100%;
+/* Schema table layout */
+.quarto-openapi-table {
+  overflow-x: auto;
 }
 
-.quarto-openapi-table td,
-.quarto-openapi-table th {
-  overflow-wrap: break-word;
-  word-break: break-word;
+.quarto-openapi-table colgroup {
+  display: none;
+}
+
+.quarto-openapi-table table {
+  table-layout: auto;
+}
+
+.quarto-openapi-table td:first-child,
+.quarto-openapi-table th:first-child {
+  white-space: nowrap;
+}
+
+.quarto-openapi-table td:nth-child(2),
+.quarto-openapi-table th:nth-child(2) {
+  white-space: nowrap;
 }
 
 /* Nesting indentation for schema property tables */
