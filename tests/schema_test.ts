@@ -1,4 +1,5 @@
 import {
+  assert,
   assertStringIncludes,
 } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { renderSchema } from "../_extensions/quarto-openapi/lib/schema.ts";
@@ -164,6 +165,70 @@ Deno.test("renderSchema: $ref in properties resolves correctly", () => {
 
   assertStringIncludes(output, "`tag`");
   assertStringIncludes(output, "`tag.label`");
+});
+
+Deno.test("renderSchema: nested field uses CSS class instead of leading spaces", () => {
+  const spec = specWithSchemas();
+  const schema: Schema = {
+    type: "object",
+    properties: {
+      owner: {
+        type: "object",
+        description: "The owner",
+        properties: {
+          name: { type: "string" },
+        },
+      },
+    },
+  };
+
+  const output = rendered(spec, schema);
+
+  // Nested field should use span class for indentation, not leading spaces
+  assertStringIncludes(output, "[`owner.name`]{.schema-nest-1}");
+  // Should NOT have leading-space indentation before the backtick
+  assert(!output.includes("  `owner.name`"), "should not use space indentation");
+});
+
+Deno.test("renderSchema: top-level fields have no span wrapper", () => {
+  const spec = specWithSchemas();
+  const schema: Schema = {
+    type: "object",
+    properties: {
+      name: { type: "string" },
+    },
+  };
+
+  const output = rendered(spec, schema);
+
+  // Top-level field should be plain backtick-quoted, not wrapped in a span
+  assertStringIncludes(output, "| `name`");
+  assert(!output.includes("{.schema-nest"), "top-level fields should not have nesting class");
+});
+
+Deno.test("renderSchema: deeper nesting increments class number", () => {
+  const spec = specWithSchemas();
+  const schema: Schema = {
+    type: "object",
+    properties: {
+      a: {
+        type: "object",
+        properties: {
+          b: {
+            type: "object",
+            properties: {
+              c: { type: "string" },
+            },
+          },
+        },
+      },
+    },
+  };
+
+  const output = rendered(spec, schema);
+
+  assertStringIncludes(output, "[`a.b`]{.schema-nest-1}");
+  assertStringIncludes(output, "[`a.b.c`]{.schema-nest-2}");
 });
 
 Deno.test("renderSchema: nullable type shows type|null", () => {
