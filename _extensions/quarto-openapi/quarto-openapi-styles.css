@@ -1,3 +1,15 @@
+/* Prevent schema tables from overflowing into the sidebar */
+.quarto-openapi-table table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.quarto-openapi-table td,
+.quarto-openapi-table th {
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
 /* Nesting indentation for schema property tables */
 .schema-nest-1 { padding-left: 1em; }
 .schema-nest-2 { padding-left: 2em; }
