@@ -155,6 +155,50 @@ export function renderSection(spec: OpenAPISpec, section: Section): string[] {
   return lines;
 }
 
+/**
+ * Shift markdown headings in a description so the highest heading
+ * becomes h4 (one level below the endpoint h3).
+ * Headings inside fenced code blocks are left untouched.
+ */
+function shiftHeadings(description: string): string {
+  const lines = description.split("\n");
+  const headingRe = /^(#{1,6})\s/;
+
+  // First pass: find minimum heading level outside code fences.
+  let minLevel = 7;
+  let inFence = false;
+  for (const line of lines) {
+    if (/^```/.test(line)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+    const m = headingRe.exec(line);
+    if (m) minLevel = Math.min(minLevel, m[1].length);
+  }
+
+  if (minLevel >= 7) return description; // no headings found
+
+  const shift = 4 - minLevel;
+  if (shift <= 0) return description;
+
+  // Second pass: shift headings outside code fences.
+  inFence = false;
+  const result = lines.map((line) => {
+    if (/^```/.test(line)) {
+      inFence = !inFence;
+      return line;
+    }
+    if (inFence) return line;
+    return line.replace(headingRe, (_full, hashes: string) => {
+      const newLevel = Math.min(hashes.length + shift, 6);
+      return "#".repeat(newLevel) + " ";
+    });
+  });
+
+  return result.join("\n");
+}
+
 function renderEndpoint(spec: OpenAPISpec, endpoint: Endpoint): string[] {
   const { method, path, operation } = endpoint;
   const title = operation.summary || `${methodBadge(method)} ${path}`;
@@ -178,9 +222,9 @@ function renderEndpoint(spec: OpenAPISpec, endpoint: Endpoint): string[] {
     lines.push("");
   }
 
-  // Description
+  // Description — shift headings so they nest below the endpoint h3
   if (operation.description) {
-    lines.push(operation.description);
+    lines.push(shiftHeadings(operation.description));
     lines.push("");
   }
 

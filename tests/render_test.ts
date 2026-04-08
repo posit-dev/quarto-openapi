@@ -196,3 +196,78 @@ Deno.test("renderSection: untagged fallback section heading is title-cased", () 
   // Path prefix "audit-logs" should render as "Audit Logs", not "audit-logs"
   assertStringIncludes(output, "## Audit Logs");
 });
+
+Deno.test("renderSection: description headings shift below endpoint level", () => {
+  const spec = minimalSpec({
+    "/v1/users": {
+      get: {
+        operationId: "listUsers",
+        summary: "List users",
+        description: "### CSV export\n\nExport users as CSV.",
+        responses: { "200": { description: "OK" } },
+      },
+    },
+  });
+
+  const output = renderedSection(spec);
+
+  // The ### in the description should become #### (one below the endpoint h3)
+  assertStringIncludes(output, "#### CSV export");
+});
+
+Deno.test("renderSection: description heading hierarchy is preserved", () => {
+  const spec = minimalSpec({
+    "/v1/users": {
+      get: {
+        operationId: "listUsers",
+        summary: "List users",
+        description:
+          "### CSV export\n\nExport as CSV.\n\n#### Filters\n\nFilter options.",
+        responses: { "200": { description: "OK" } },
+      },
+    },
+  });
+
+  const output = renderedSection(spec);
+
+  // ### -> ####, #### -> #####
+  assertStringIncludes(output, "#### CSV export");
+  assertStringIncludes(output, "##### Filters");
+});
+
+Deno.test("renderSection: description without headings passes through unchanged", () => {
+  const spec = minimalSpec({
+    "/v1/users": {
+      get: {
+        operationId: "listUsers",
+        summary: "List users",
+        description: "Returns a list of users.\n\nSupports pagination.",
+        responses: { "200": { description: "OK" } },
+      },
+    },
+  });
+
+  const output = renderedSection(spec);
+
+  assertStringIncludes(output, "Returns a list of users.\n\nSupports pagination.");
+});
+
+Deno.test("renderSection: headings inside code blocks are not shifted", () => {
+  const spec = minimalSpec({
+    "/v1/users": {
+      get: {
+        operationId: "listUsers",
+        summary: "List users",
+        description:
+          "### Examples\n\n```markdown\n### This is a code sample\n```",
+        responses: { "200": { description: "OK" } },
+      },
+    },
+  });
+
+  const output = renderedSection(spec);
+
+  // The real heading shifts, but the one inside the code fence should not
+  assertStringIncludes(output, "#### Examples");
+  assertStringIncludes(output, "```markdown\n### This is a code sample\n```");
+});
