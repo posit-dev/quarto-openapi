@@ -1,0 +1,5 @@
+/* Nesting indentation for schema property tables */
+.schema-nest-1 { padding-left: 1em; }
+.schema-nest-2 { padding-left: 2em; }
+.schema-nest-3 { padding-left: 3em; }
+.schema-nest-4 { padding-left: 4em; }

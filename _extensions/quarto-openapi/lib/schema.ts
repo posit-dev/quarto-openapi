@@ -158,7 +158,9 @@ function flattenProperties(
   for (const [name, prop] of Object.entries(properties)) {
     const resolved = isReference(prop) ? resolve<Schema>(spec, prop) : prop;
     const displayName = prefix ? `${prefix}.${name}` : name;
-    const indent = "  ".repeat(depth);
+    const nameCell = depth > 0
+      ? `[\`${displayName}\`]{.schema-nest-${depth}}`
+      : `\`${displayName}\``;
 
     if (
       (resolved.type === "object" || resolved.properties) &&
@@ -167,7 +169,7 @@ function flattenProperties(
     ) {
       // Nested object: emit a row for the object itself, then recurse
       rows.push({
-        name: `${indent}\`${displayName}\``,
+        name: nameCell,
         type: "`object`",
         description: resolved.description || "",
       });
@@ -183,7 +185,7 @@ function flattenProperties(
     } else if (resolved.allOf) {
       const merged = mergeAllOf(spec, resolved.allOf);
       rows.push({
-        name: `${indent}\`${displayName}\``,
+        name: nameCell,
         type: "`object`",
         description: resolved.description || merged.description || "",
       });
@@ -205,7 +207,7 @@ function flattenProperties(
 
       if (items.type === "object" || items.properties || items.allOf) {
         rows.push({
-          name: `${indent}\`${displayName}\``,
+          name: nameCell,
           type: "`[object]`",
           description: buildDescription(resolved, requiredSet.has(name)),
         });
@@ -224,14 +226,14 @@ function flattenProperties(
       } else {
         const itemType = items.type || "unknown";
         rows.push({
-          name: `${indent}\`${displayName}\``,
+          name: nameCell,
           type: `\`[${itemType}]\``,
           description: buildDescription(resolved, requiredSet.has(name)),
         });
       }
     } else {
       rows.push({
-        name: `${indent}\`${displayName}\``,
+        name: nameCell,
         type: `\`${formatTypeString(resolved)}\``,
         description: buildDescription(resolved, requiredSet.has(name)),
       });

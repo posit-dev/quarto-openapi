@@ -7,3 +7,7 @@ contributes:
     project:
       pre-render:
         - _extensions/quarto-openapi/openapi-to-markdown.ts
+  format:
+    html:
+      css:
+        - quarto-openapi-styles.css
