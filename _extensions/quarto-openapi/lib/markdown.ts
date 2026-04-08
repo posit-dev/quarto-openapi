@@ -55,6 +55,7 @@ export function gridTable(headers: string[], rows: TableRow[]): string[] {
     }
   };
 
+  lines.push("::: {.quarto-openapi-table}");
   lines.push(separator("-"));
   emitRow(headerLines);
   lines.push(separator("="));
@@ -63,6 +64,8 @@ export function gridTable(headers: string[], rows: TableRow[]): string[] {
     emitRow(row);
     lines.push(separator("-"));
   }
+
+  lines.push(":::");
 
   return lines;
 }
