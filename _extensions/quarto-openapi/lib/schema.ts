@@ -273,10 +273,12 @@ function buildDescription(schema: Schema, isRequired: boolean): string {
   return parts.join("\n");
 }
 
+const semanticFormats = new Set(["date-time", "date", "time", "duration", "uuid", "uri", "uri-reference", "email", "hostname", "ipv4", "ipv6", "byte", "binary", "password"]);
+
 function formatTypeString(schema: Schema): string {
   let type = schema.type || "unknown";
 
-  if (schema.format) {
+  if (schema.format && semanticFormats.has(schema.format)) {
     type = `${type} (${schema.format})`;
   }
   if (schema.nullable) {
@@ -288,7 +290,7 @@ function formatTypeString(schema: Schema): string {
 
 function formatPrimitiveType(schema: Schema): string {
   const parts = [schema.type || "unknown"];
-  if (schema.format) parts.push(`(${schema.format})`);
+  if (schema.format && semanticFormats.has(schema.format)) parts.push(`(${schema.format})`);
   return parts.join(" ");
 }
 
