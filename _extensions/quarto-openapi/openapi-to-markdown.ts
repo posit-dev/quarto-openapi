@@ -12,8 +12,8 @@
  *     output: "api/index.qmd"
  */
 
-import { parse as parseYaml, stringify as stringifyYaml } from "https://deno.land/std@0.224.0/yaml/mod.ts";
-import { join, dirname, extname } from "https://deno.land/std@0.224.0/path/mod.ts";
+import { parse as parseYaml, stringify as stringifyYaml } from "stdlib/yaml";
+import { join, dirname, extname } from "stdlib/path";
 import type { OpenAPISpec } from "./lib/types.ts";
 import { groupByResource, renderSection } from "./lib/sections.ts";
 
