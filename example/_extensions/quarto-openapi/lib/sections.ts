@@ -123,10 +123,28 @@ export function groupByResource(spec: OpenAPISpec): Section[] {
     }
   }
 
-  // Preserve insertion order (first-seen tag order).
+  // Determine section order: use spec.tags when present, otherwise first-seen.
+  const orderedNames: string[] = [];
+  if (spec.tags && spec.tags.length > 0) {
+    for (const tag of spec.tags) {
+      if (sectionMap.has(tag.name)) {
+        orderedNames.push(tag.name);
+      }
+    }
+    // Append any tags not listed in spec.tags (first-seen order).
+    for (const name of sectionMap.keys()) {
+      if (!orderedNames.includes(name)) {
+        orderedNames.push(name);
+      }
+    }
+  } else {
+    orderedNames.push(...sectionMap.keys());
+  }
+
   // Sort endpoints within each section by path then method.
   const sections: Section[] = [];
-  for (const [name, endpoints] of sectionMap) {
+  for (const name of orderedNames) {
+    const endpoints = sectionMap.get(name)!;
     endpoints.sort((a, b) => {
       const pathCmp = a.path.localeCompare(b.path);
       if (pathCmp !== 0) return pathCmp;
@@ -155,6 +173,50 @@ export function renderSection(spec: OpenAPISpec, section: Section): string[] {
   return lines;
 }
 
+/**
+ * Shift markdown headings in a description so the highest heading
+ * becomes h4 (one level below the endpoint h3).
+ * Headings inside fenced code blocks are left untouched.
+ */
+function shiftHeadings(description: string): string {
+  const lines = description.split("\n");
+  const headingRe = /^(#{1,6})\s/;
+
+  // First pass: find minimum heading level outside code fences.
+  let minLevel = 7;
+  let inFence = false;
+  for (const line of lines) {
+    if (/^```/.test(line)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+    const m = headingRe.exec(line);
+    if (m) minLevel = Math.min(minLevel, m[1].length);
+  }
+
+  if (minLevel >= 7) return description; // no headings found
+
+  const shift = 4 - minLevel;
+  if (shift <= 0) return description;
+
+  // Second pass: shift headings outside code fences.
+  inFence = false;
+  const result = lines.map((line) => {
+    if (/^```/.test(line)) {
+      inFence = !inFence;
+      return line;
+    }
+    if (inFence) return line;
+    return line.replace(headingRe, (_full, hashes: string) => {
+      const newLevel = Math.min(hashes.length + shift, 6);
+      return "#".repeat(newLevel) + " ";
+    });
+  });
+
+  return result.join("\n");
+}
+
 function renderEndpoint(spec: OpenAPISpec, endpoint: Endpoint): string[] {
   const { method, path, operation } = endpoint;
   const title = operation.summary || `${methodBadge(method)} ${path}`;
@@ -178,9 +240,9 @@ function renderEndpoint(spec: OpenAPISpec, endpoint: Endpoint): string[] {
     lines.push("");
   }
 
-  // Description
+  // Description — shift headings so they nest below the endpoint h3
   if (operation.description) {
-    lines.push(operation.description);
+    lines.push(shiftHeadings(operation.description));
     lines.push("");
   }
 
