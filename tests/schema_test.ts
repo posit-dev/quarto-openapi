@@ -1,5 +1,6 @@
 import {
   assert,
+  assertEquals,
   assertStringIncludes,
 } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { renderSchema } from "../_extensions/quarto-openapi/lib/schema.ts";
@@ -243,4 +244,61 @@ Deno.test("renderSchema: nullable type shows type|null", () => {
   const output = rendered(spec, schema);
 
   assertStringIncludes(output, "string|null");
+});
+
+Deno.test("renderSchema: numeric formats like int32 and double are suppressed", () => {
+  const spec = specWithSchemas();
+  const schema: Schema = {
+    type: "object",
+    properties: {
+      count: { type: "integer", format: "int32" },
+      bigCount: { type: "integer", format: "int64" },
+      score: { type: "number", format: "double" },
+      ratio: { type: "number", format: "float" },
+    },
+  };
+
+  const output = rendered(spec, schema);
+
+  assertStringIncludes(output, "`integer`");
+  assertStringIncludes(output, "`number`");
+  assert(!output.includes("int32"), "int32 should be suppressed");
+  assert(!output.includes("int64"), "int64 should be suppressed");
+  assert(!output.includes("double"), "double should be suppressed");
+  assert(!output.includes("float"), "float should be suppressed");
+});
+
+Deno.test("renderSchema: semantic formats like date-time and uuid are shown", () => {
+  const spec = specWithSchemas();
+  const schema: Schema = {
+    type: "object",
+    properties: {
+      created: { type: "string", format: "date-time" },
+      id: { type: "string", format: "uuid" },
+      website: { type: "string", format: "uri" },
+      contact: { type: "string", format: "email" },
+    },
+  };
+
+  const output = rendered(spec, schema);
+
+  assertStringIncludes(output, "string (date-time)");
+  assertStringIncludes(output, "string (uuid)");
+  assertStringIncludes(output, "string (uri)");
+  assertStringIncludes(output, "string (email)");
+});
+
+Deno.test("renderSchema: nullable with suppressed format renders type|null without parens", () => {
+  const spec = specWithSchemas();
+  const schema: Schema = {
+    type: "object",
+    properties: {
+      count: { type: "integer", format: "int64", nullable: true },
+    },
+  };
+
+  const output = rendered(spec, schema);
+
+  assertStringIncludes(output, "`integer|null`");
+  assert(!output.includes("int64"), "int64 should be suppressed even when nullable");
 });
