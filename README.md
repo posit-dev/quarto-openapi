@@ -18,9 +18,21 @@ Add an `openapi` key to your project's `_quarto.yml`:
 openapi:
   spec: "openapi.json"        # path to your OpenAPI 3.x spec (JSON or YAML)
   output: "api/index.qmd"     # output file path
+  anchor-style: "operation-id" # anchor ID strategy (default: "operation-id")
 ```
 
-Both fields are required. Add the output file to `.gitignore` since the extension regenerates it on each render.
+`spec` and `output` are required. Add the output file to `.gitignore` since the extension regenerates it on each render.
+
+### `anchor-style`
+
+Controls how anchor IDs are generated for endpoint headings. Optional, defaults to `"operation-id"`.
+
+| Value | Anchor source | Example |
+|-------|---------------|---------|
+| `"operation-id"` | `operationId` field, falling back to method + path | `#listPets` |
+| `"path"` | Always method + path (rapidoc-style) | `#get-/v1/pets` |
+
+Use `"path"` when you need stable anchors that don't change when `operationId` values are renamed, or to preserve compatibility with existing links from a RapiDoc-based site.
 
 ## Usage
 

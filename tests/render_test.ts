@@ -4,6 +4,7 @@ import {
 import {
   groupByResource,
   renderSection,
+  type RenderOptions,
 } from "../_extensions/quarto-openapi/lib/sections.ts";
 import type { OpenAPISpec } from "../_extensions/quarto-openapi/lib/types.ts";
 
@@ -266,6 +267,69 @@ Deno.test("renderSection: sub-heading anchors fall back to method+path slug with
   assertStringIncludes(output, '#### Responses {id="get-/v1/pets-responses"}');
   assertStringIncludes(output, '##### 200 {id="get-/v1/pets-200"}');
   assertStringIncludes(output, '##### 400 {id="get-/v1/pets-400"}');
+});
+
+Deno.test("renderSection: anchor-style path forces path anchors even with operationId", () => {
+  const spec = minimalSpec({
+    "/v1/pets": {
+      get: {
+        operationId: "listPets",
+        summary: "List all pets",
+        tags: ["Pets"],
+        responses: { "200": { description: "OK" } },
+      },
+    },
+  });
+
+  const sections = groupByResource(spec);
+  const output = renderSection(spec, sections[0], { anchorStyle: "path" }).join("\n");
+
+  assertStringIncludes(output, '{id="get-/v1/pets"}');
+});
+
+Deno.test("renderSection: anchor-style path propagates to sub-anchors", () => {
+  const spec = minimalSpec({
+    "/v1/pets": {
+      get: {
+        operationId: "listPets",
+        summary: "List all pets",
+        tags: ["Pets"],
+        parameters: [
+          { name: "limit", in: "query", schema: { type: "integer" } },
+        ],
+        responses: {
+          "200": { description: "OK" },
+          "400": { description: "Bad request" },
+        },
+      },
+    },
+  });
+
+  const sections = groupByResource(spec);
+  const output = renderSection(spec, sections[0], { anchorStyle: "path" }).join("\n");
+
+  assertStringIncludes(output, '#### Parameters {id="get-/v1/pets-parameters"}');
+  assertStringIncludes(output, '#### Responses {id="get-/v1/pets-responses"}');
+  assertStringIncludes(output, '##### 200 {id="get-/v1/pets-200"}');
+  assertStringIncludes(output, '##### 400 {id="get-/v1/pets-400"}');
+});
+
+Deno.test("renderSection: explicit anchor-style operation-id uses operationId", () => {
+  const spec = minimalSpec({
+    "/v1/pets": {
+      get: {
+        operationId: "listPets",
+        summary: "List all pets",
+        tags: ["Pets"],
+        responses: { "200": { description: "OK" } },
+      },
+    },
+  });
+
+  const sections = groupByResource(spec);
+  const output = renderSection(spec, sections[0], { anchorStyle: "operation-id" }).join("\n");
+
+  assertStringIncludes(output, '{id="listPets"}');
 });
 
 Deno.test("renderSection: path-level parameters merged into operations", () => {
