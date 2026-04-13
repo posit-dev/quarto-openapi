@@ -70,12 +70,14 @@ export function rewriteOperationIdRefs(text: string, idToPath: Map<string, strin
   let fenceLen = 0; // 0 = not in fence; >0 = length of opening backtick run
 
   for (let i = 0; i < lines.length; i++) {
-    const fenceMatch = /^(`{3,})/.exec(lines[i]);
+    const fenceMatch = /^(`{3,})(.*)$/.exec(lines[i]);
     if (fenceMatch) {
+      const ticks = fenceMatch[1].length;
+      const trailing = fenceMatch[2];
       if (fenceLen === 0) {
-        fenceLen = fenceMatch[1].length; // open
-      } else if (fenceMatch[1].length >= fenceLen) {
-        fenceLen = 0; // close
+        fenceLen = ticks; // open (info string after backticks is allowed)
+      } else if (ticks >= fenceLen && trailing.trim() === "") {
+        fenceLen = 0; // close (only backticks + optional whitespace)
       }
       continue;
     }

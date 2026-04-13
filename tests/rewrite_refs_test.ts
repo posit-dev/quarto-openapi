@@ -84,3 +84,17 @@ Deno.test("rewriteOperationIdRefs: inner triple-backtick does not close a longer
   const result = rewriteOperationIdRefs(input, idToPath);
   assertEquals(result, input);
 });
+
+Deno.test("rewriteOperationIdRefs: fence opener with info string does not close fence", () => {
+  const idToPath = new Map([["listPets", "get-/v1/pets"]]);
+  const input = "```\n````js\n(#listPets)\n````\n```";
+  const result = rewriteOperationIdRefs(input, idToPath);
+  assertEquals(result, input);
+});
+
+Deno.test("rewriteOperationIdRefs: quarto-style fenced code block skips content", () => {
+  const idToPath = new Map([["listPets", "get-/v1/pets"]]);
+  const input = '```{python}\n# see (#listPets)\nprint("hello")\n```';
+  const result = rewriteOperationIdRefs(input, idToPath);
+  assertEquals(result, input);
+});
