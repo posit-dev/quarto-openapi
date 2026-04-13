@@ -15,11 +15,14 @@
 import { parse as parseYaml, stringify as stringifyYaml } from "stdlib/yaml";
 import { join, dirname, extname } from "stdlib/path";
 import type { OpenAPISpec } from "./lib/types.ts";
-import { groupByResource, renderSection } from "./lib/sections.ts";
+import { groupByResource, renderSection, type RenderOptions } from "./lib/sections.ts";
+
+type AnchorStyle = "operation-id" | "path";
 
 interface OpenAPIConfig {
   spec: string;
   output: string;
+  "anchor-style"?: AnchorStyle;
 }
 
 interface QuartoProject {
@@ -60,6 +63,14 @@ async function main() {
     console.error("openapi.output is required in _quarto.yml");
     Deno.exit(1);
   }
+
+  const validAnchorStyles: AnchorStyle[] = ["operation-id", "path"];
+  if (config["anchor-style"] && !validAnchorStyles.includes(config["anchor-style"])) {
+    console.error(`openapi.anchor-style must be one of: ${validAnchorStyles.join(", ")}`);
+    Deno.exit(1);
+  }
+  const anchorStyle: AnchorStyle = config["anchor-style"] ?? "operation-id";
+  const renderOptions: RenderOptions = { anchorStyle };
 
   // Load the OpenAPI spec
   const specPath = join(projectDir, config.spec);
@@ -122,7 +133,7 @@ async function main() {
 
   // Sections
   for (const section of sections) {
-    lines.push(...renderSection(spec, section));
+    lines.push(...renderSection(spec, section, renderOptions));
   }
 
   // Write output

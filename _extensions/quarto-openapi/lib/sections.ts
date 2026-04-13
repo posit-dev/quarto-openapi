@@ -37,6 +37,12 @@ export interface Endpoint {
   operation: Operation;
 }
 
+export interface RenderOptions {
+  anchorStyle: "operation-id" | "path";
+}
+
+const DEFAULT_OPTIONS: RenderOptions = { anchorStyle: "operation-id" };
+
 /**
  * Extract the resource name from a path.
  * /v1/content/{guid}/bundles -> "content"
@@ -159,14 +165,14 @@ export function groupByResource(spec: OpenAPISpec): Section[] {
 /**
  * Render a section with a ## heading and ### per endpoint.
  */
-export function renderSection(spec: OpenAPISpec, section: Section): string[] {
+export function renderSection(spec: OpenAPISpec, section: Section, options: RenderOptions = DEFAULT_OPTIONS): string[] {
   const lines: string[] = [];
 
   lines.push(heading(2, section.name));
   lines.push("");
 
   for (const endpoint of section.endpoints) {
-    lines.push(...renderEndpoint(spec, endpoint));
+    lines.push(...renderEndpoint(spec, endpoint, options));
     lines.push("");
   }
 
@@ -217,10 +223,12 @@ function shiftHeadings(description: string): string {
   return result.join("\n");
 }
 
-function renderEndpoint(spec: OpenAPISpec, endpoint: Endpoint): string[] {
+function renderEndpoint(spec: OpenAPISpec, endpoint: Endpoint, options: RenderOptions = DEFAULT_OPTIONS): string[] {
   const { method, path, operation } = endpoint;
   const title = operation.summary || `${methodBadge(method)} ${path}`;
-  const anchor = operation.operationId || pathToAnchor(method, path);
+  const anchor = options.anchorStyle === "path"
+    ? pathToAnchor(method, path)
+    : operation.operationId || pathToAnchor(method, path);
 
   const lines: string[] = [];
 
