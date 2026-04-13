@@ -99,12 +99,21 @@ export function tabset(
 }
 
 /**
+ * Sanitize a string for use as an HTML/Pandoc anchor ID.
+ * Keeps alphanumerics, hyphens, underscores, dots, and slashes;
+ * replaces everything else (including quotes) with hyphens.
+ */
+export function sanitizeId(raw: string): string {
+  return raw.replace(/[^A-Za-z0-9._\/-]/g, "-");
+}
+
+/**
  * Generate a heading with an explicit anchor ID.
  */
 export function heading(level: number, text: string, id?: string): string {
   const prefix = "#".repeat(level);
   if (id) {
-    return `${prefix} ${text} {id="${id}"}`;
+    return `${prefix} ${text} {id="${sanitizeId(id)}"}`;
   }
   return `${prefix} ${text}`;
 }

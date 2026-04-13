@@ -6,6 +6,7 @@ import {
   gridTable,
   heading,
   pathToAnchor,
+  sanitizeId,
 } from "../_extensions/quarto-openapi/lib/markdown.ts";
 
 Deno.test("gridTable: produces valid Pandoc grid table syntax", () => {
@@ -47,6 +48,20 @@ Deno.test("heading: renders with optional anchor id", () => {
   assertEquals(
     heading(3, "List pets", "listPets"),
     '### List pets {id="listPets"}',
+  );
+});
+
+Deno.test("sanitizeId: strips quotes and special characters from anchor IDs", () => {
+  assertEquals(sanitizeId('foo"bar'), "foo-bar");
+  assertEquals(sanitizeId("get-/v1/pets"), "get-/v1/pets");
+  assertEquals(sanitizeId("listPets-200"), "listPets-200");
+  assertEquals(sanitizeId("a<b>c&d"), "a-b-c-d");
+});
+
+Deno.test("heading: sanitizes id to prevent attribute injection", () => {
+  assertEquals(
+    heading(3, "Danger", 'evil"} .class{id="x'),
+    '### Danger {id="evil---.class-id--x"}',
   );
 });
 
