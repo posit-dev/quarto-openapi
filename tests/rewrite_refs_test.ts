@@ -49,3 +49,31 @@ Deno.test("rewriteOperationIdRefs: no-op on empty map", () => {
   const result = rewriteOperationIdRefs(input, idToPath);
   assertEquals(result, input);
 });
+
+Deno.test("rewriteOperationIdRefs: skips fragments inside fenced code blocks", () => {
+  const idToPath = new Map([["listPets", "get-/v1/pets"]]);
+  const input = "```\nSee (#listPets).\n```";
+  const result = rewriteOperationIdRefs(input, idToPath);
+  assertEquals(result, input);
+});
+
+Deno.test("rewriteOperationIdRefs: skips fragments inside inline code", () => {
+  const idToPath = new Map([["listPets", "get-/v1/pets"]]);
+  const input = "Use `(#listPets)` in your link.";
+  const result = rewriteOperationIdRefs(input, idToPath);
+  assertEquals(result, input);
+});
+
+Deno.test("rewriteOperationIdRefs: rewrites outside code but not inside", () => {
+  const idToPath = new Map([["listPets", "get-/v1/pets"]]);
+  const input = "See [pets](#listPets). Example: `(#listPets)`";
+  const result = rewriteOperationIdRefs(input, idToPath);
+  assertEquals(result, "See [pets](#get-/v1/pets). Example: `(#listPets)`");
+});
+
+Deno.test("rewriteOperationIdRefs: rewrites between fenced code blocks", () => {
+  const idToPath = new Map([["listPets", "get-/v1/pets"]]);
+  const input = "```\n(#listPets)\n```\n\nSee (#listPets).\n\n```\n(#listPets)\n```";
+  const result = rewriteOperationIdRefs(input, idToPath);
+  assertEquals(result, "```\n(#listPets)\n```\n\nSee (#get-/v1/pets).\n\n```\n(#listPets)\n```");
+});
