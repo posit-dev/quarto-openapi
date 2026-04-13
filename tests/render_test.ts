@@ -99,6 +99,29 @@ Deno.test("renderSection: parameters rendered as grid table", () => {
   assertStringIncludes(output, "Max items");
 });
 
+Deno.test("renderSection: parameters heading has scoped anchor ID", () => {
+  const spec = minimalSpec({
+    "/v1/pets": {
+      get: {
+        operationId: "listPets",
+        summary: "List pets",
+        parameters: [
+          {
+            name: "limit",
+            in: "query",
+            schema: { type: "integer" },
+          },
+        ],
+        responses: { "200": { description: "OK" } },
+      },
+    },
+  });
+
+  const output = renderedSection(spec);
+
+  assertStringIncludes(output, '#### Parameters {id="listPets-parameters"}');
+});
+
 Deno.test("renderSection: request body schema rendered", () => {
   const spec = minimalSpec({
     "/v1/pets": {
@@ -129,6 +152,50 @@ Deno.test("renderSection: request body schema rendered", () => {
   assertStringIncludes(output, "Pet name");
 });
 
+Deno.test("renderSection: request body heading has scoped anchor ID", () => {
+  const spec = minimalSpec({
+    "/v1/pets": {
+      post: {
+        operationId: "createPet",
+        summary: "Create a pet",
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  name: { type: "string" },
+                },
+              },
+            },
+          },
+        },
+        responses: { "201": { description: "Created" } },
+      },
+    },
+  });
+
+  const output = renderedSection(spec);
+
+  assertStringIncludes(output, '#### Request body {id="createPet-request-body"}');
+});
+
+Deno.test("renderSection: responses heading has scoped anchor ID", () => {
+  const spec = minimalSpec({
+    "/v1/pets": {
+      get: {
+        operationId: "listPets",
+        summary: "List pets",
+        responses: { "200": { description: "OK" } },
+      },
+    },
+  });
+
+  const output = renderedSection(spec);
+
+  assertStringIncludes(output, '#### Responses {id="listPets-responses"}');
+});
+
 Deno.test("renderSection: multiple responses render as tabset", () => {
   const spec = minimalSpec({
     "/v1/pets/{id}": {
@@ -148,6 +215,57 @@ Deno.test("renderSection: multiple responses render as tabset", () => {
   assertStringIncludes(output, ".panel-tabset");
   assertStringIncludes(output, "**200**: OK");
   assertStringIncludes(output, "**404**: Not found");
+});
+
+Deno.test("renderSection: response code tab headings have scoped anchor IDs", () => {
+  const spec = minimalSpec({
+    "/v1/pets/{id}": {
+      get: {
+        operationId: "getPet",
+        summary: "Get a pet",
+        responses: {
+          "200": { description: "OK" },
+          "404": { description: "Not found" },
+        },
+      },
+    },
+  });
+
+  const output = renderedSection(spec);
+
+  assertStringIncludes(output, '##### 200 {id="getPet-200"}');
+  assertStringIncludes(output, '##### 404 {id="getPet-404"}');
+});
+
+Deno.test("renderSection: sub-heading anchors fall back to method+path slug without operationId", () => {
+  const spec = minimalSpec({
+    "/v1/pets": {
+      get: {
+        summary: "List pets",
+        parameters: [
+          {
+            name: "limit",
+            in: "query",
+            schema: { type: "integer" },
+          },
+        ],
+        responses: {
+          "200": { description: "OK" },
+          "400": { description: "Bad request" },
+        },
+      },
+    },
+  });
+
+  const output = renderedSection(spec);
+
+  // Endpoint heading uses path-based anchor
+  assertStringIncludes(output, '{id="get-/v1/pets"}');
+  // Sub-headings use the same slug as prefix
+  assertStringIncludes(output, '#### Parameters {id="get-/v1/pets-parameters"}');
+  assertStringIncludes(output, '#### Responses {id="get-/v1/pets-responses"}');
+  assertStringIncludes(output, '##### 200 {id="get-/v1/pets-200"}');
+  assertStringIncludes(output, '##### 400 {id="get-/v1/pets-400"}');
 });
 
 Deno.test("renderSection: path-level parameters merged into operations", () => {

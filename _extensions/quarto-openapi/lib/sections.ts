@@ -249,7 +249,7 @@ function renderEndpoint(spec: OpenAPISpec, endpoint: Endpoint): string[] {
   // Parameters
   const paramLines = renderParameters(spec, operation, path);
   if (paramLines.length > 0) {
-    lines.push(heading(4, "Parameters"));
+    lines.push(heading(4, "Parameters", `${anchor}-parameters`));
     lines.push("");
     lines.push(...paramLines);
     lines.push("");
@@ -258,16 +258,16 @@ function renderEndpoint(spec: OpenAPISpec, endpoint: Endpoint): string[] {
   // Request body
   const bodyLines = renderRequestBody(spec, operation);
   if (bodyLines.length > 0) {
-    lines.push(heading(4, "Request body"));
+    lines.push(heading(4, "Request body", `${anchor}-request-body`));
     lines.push("");
     lines.push(...bodyLines);
     lines.push("");
   }
 
   // Responses
-  const responseLines = renderResponses(spec, operation);
+  const responseLines = renderResponses(spec, operation, anchor);
   if (responseLines.length > 0) {
-    lines.push(heading(4, "Responses"));
+    lines.push(heading(4, "Responses", `${anchor}-responses`));
     lines.push("");
     lines.push(...responseLines);
     lines.push("");
@@ -371,6 +371,7 @@ function renderRequestBody(
 function renderResponses(
   spec: OpenAPISpec,
   operation: Operation,
+  anchor: string,
 ): string[] {
   const entries = Object.entries(operation.responses).sort(
     ([a], [b]) => a.localeCompare(b),
@@ -402,7 +403,7 @@ function renderResponses(
     "::: {.panel-tabset}",
     "",
     ...tabs.flatMap((tab) => [
-      `##### ${tab.label}`,
+      heading(5, tab.label, `${anchor}-${tab.label}`),
       "",
       ...tab.content,
       "",
