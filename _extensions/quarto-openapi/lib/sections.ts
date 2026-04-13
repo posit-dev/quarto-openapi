@@ -66,11 +66,38 @@ export function buildOperationIdToPathMap(spec: OpenAPISpec): Map<string, string
  * Matches patterns like (#operationId) and [text](#operationId).
  */
 export function rewriteOperationIdRefs(text: string, idToPath: Map<string, string>): string {
-  // Match markdown link fragments: (#someId) or [text](#someId)
-  return text.replace(/\(#([a-zA-Z]\w+)\)/g, (_match, id) => {
-    const pathAnchor = idToPath.get(id);
-    return pathAnchor ? `(#${pathAnchor})` : _match;
-  });
+  const lines = text.split("\n");
+  let fenceLen = 0; // 0 = not in fence; >0 = length of opening backtick run
+
+  for (let i = 0; i < lines.length; i++) {
+    const fenceMatch = /^(`{3,})(.*)$/.exec(lines[i]);
+    if (fenceMatch) {
+      const ticks = fenceMatch[1].length;
+      const trailing = fenceMatch[2];
+      if (fenceLen === 0) {
+        fenceLen = ticks; // open (info string after backticks is allowed)
+      } else if (ticks >= fenceLen && trailing.trim() === "") {
+        fenceLen = 0; // close (only backticks + optional whitespace)
+      }
+      continue;
+    }
+    if (fenceLen > 0) continue;
+
+    // Replace fragments outside inline code spans.
+    // Split line by backtick-delimited segments; only rewrite odd-indexed (non-code) parts.
+    const parts = lines[i].split(/(`[^`]*`)/);
+    for (let j = 0; j < parts.length; j++) {
+      if (j % 2 === 0) {
+        parts[j] = parts[j].replace(/\(#([^\s)]+)\)/g, (_match, id) => {
+          const pathAnchor = idToPath.get(id);
+          return pathAnchor ? `(#${pathAnchor})` : _match;
+        });
+      }
+    }
+    lines[i] = parts.join("");
+  }
+
+  return lines.join("\n");
 }
 
 /**

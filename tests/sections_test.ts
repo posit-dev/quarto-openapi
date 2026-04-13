@@ -342,3 +342,37 @@ Deno.test("rewriteOperationIdRefs handles multiple occurrences", () => {
 
   assertEquals(rewriteOperationIdRefs(input, idToPath), expected);
 });
+
+Deno.test("rewriteOperationIdRefs skips content inside fenced code blocks", () => {
+  const idToPath = new Map([
+    ["getTask", "get-/v1/tasks/-id-"],
+  ]);
+
+  const input = [
+    "Before (#getTask).",
+    "```",
+    "Do not rewrite (#getTask) inside fences.",
+    "```",
+    "After (#getTask).",
+  ].join("\n");
+  const expected = [
+    "Before (#get-/v1/tasks/-id-).",
+    "```",
+    "Do not rewrite (#getTask) inside fences.",
+    "```",
+    "After (#get-/v1/tasks/-id-).",
+  ].join("\n");
+
+  assertEquals(rewriteOperationIdRefs(input, idToPath), expected);
+});
+
+Deno.test("rewriteOperationIdRefs skips content inside inline code spans", () => {
+  const idToPath = new Map([
+    ["getTask", "get-/v1/tasks/-id-"],
+  ]);
+
+  const input = "Use `(#getTask)` literally, but rewrite (#getTask) outside.";
+  const expected = "Use `(#getTask)` literally, but rewrite (#get-/v1/tasks/-id-) outside.";
+
+  assertEquals(rewriteOperationIdRefs(input, idToPath), expected);
+});
