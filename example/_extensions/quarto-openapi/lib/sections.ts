@@ -44,6 +44,37 @@ export interface RenderOptions {
 const DEFAULT_OPTIONS: RenderOptions = { anchorStyle: "operation-id" };
 
 /**
+ * Build a mapping from operationId to path-style anchor for all endpoints.
+ */
+export function buildOperationIdToPathMap(spec: OpenAPISpec): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const [path, pathItem] of Object.entries(spec.paths)) {
+    const resolved = isReference(pathItem)
+      ? resolve<PathItem>(spec, pathItem)
+      : pathItem;
+    for (const method of HTTP_METHODS) {
+      const operation = resolved[method];
+      if (!operation || !operation.operationId) continue;
+      map.set(operation.operationId, pathToAnchor(method, path));
+    }
+  }
+  return map;
+}
+
+/**
+ * Rewrite operationId fragment links in markdown text to path-style anchors.
+ * Matches patterns like (#operationId) and [text](#operationId).
+ */
+export function rewriteOperationIdRefs(text: string, idToPath: Map<string, string>): string {
+  // Match markdown link fragments: (#fragment) where fragment is any non-whitespace, non-paren sequence.
+  // Covers operationIds with hyphens, dots, digits, etc.
+  return text.replace(/\(#([^\s)]+)\)/g, (_match, id) => {
+    const pathAnchor = idToPath.get(id);
+    return pathAnchor ? `(#${pathAnchor})` : _match;
+  });
+}
+
+/**
  * Extract the resource name from a path.
  * /v1/content/{guid}/bundles -> "content"
  * /v1/audit_logs -> "audit-logs"

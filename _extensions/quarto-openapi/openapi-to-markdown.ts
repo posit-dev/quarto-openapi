@@ -15,7 +15,7 @@
 import { parse as parseYaml, stringify as stringifyYaml } from "stdlib/yaml";
 import { join, dirname, extname } from "stdlib/path";
 import type { OpenAPISpec } from "./lib/types.ts";
-import { groupByResource, renderSection, type RenderOptions } from "./lib/sections.ts";
+import { groupByResource, renderSection, buildOperationIdToPathMap, rewriteOperationIdRefs, type RenderOptions } from "./lib/sections.ts";
 
 type AnchorStyle = "operation-id" | "path";
 
@@ -136,10 +136,18 @@ async function main() {
     lines.push(...renderSection(spec, section, renderOptions));
   }
 
+  // When using path-style anchors, rewrite any operationId cross-references
+  // (e.g. (#getTask)) in descriptions and schema docs to path-style anchors.
+  let output = lines.join("\n") + "\n";
+  if (anchorStyle === "path") {
+    const idToPath = buildOperationIdToPathMap(spec);
+    output = rewriteOperationIdRefs(output, idToPath);
+  }
+
   // Write output
   const outputPath = join(projectDir, config.output);
   await Deno.mkdir(dirname(outputPath), { recursive: true });
-  await Deno.writeTextFile(outputPath, lines.join("\n") + "\n");
+  await Deno.writeTextFile(outputPath, output);
 
   const totalEndpoints = sections.reduce(
     (sum, s) => sum + s.endpoints.length,
