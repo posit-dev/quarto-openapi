@@ -66,8 +66,9 @@ export function buildOperationIdToPathMap(spec: OpenAPISpec): Map<string, string
  * Matches patterns like (#operationId) and [text](#operationId).
  */
 export function rewriteOperationIdRefs(text: string, idToPath: Map<string, string>): string {
-  // Match markdown link fragments: (#someId) or [text](#someId)
-  return text.replace(/\(#([a-zA-Z]\w+)\)/g, (_match, id) => {
+  // Match markdown link fragments: (#fragment) where fragment is any non-whitespace, non-paren sequence.
+  // Covers operationIds with hyphens, dots, digits, etc.
+  return text.replace(/\(#([^\s)]+)\)/g, (_match, id) => {
     const pathAnchor = idToPath.get(id);
     return pathAnchor ? `(#${pathAnchor})` : _match;
   });
