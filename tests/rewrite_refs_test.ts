@@ -77,3 +77,10 @@ Deno.test("rewriteOperationIdRefs: rewrites between fenced code blocks", () => {
   const result = rewriteOperationIdRefs(input, idToPath);
   assertEquals(result, "```\n(#listPets)\n```\n\nSee (#get-/v1/pets).\n\n```\n(#listPets)\n```");
 });
+
+Deno.test("rewriteOperationIdRefs: inner triple-backtick does not close a longer fence", () => {
+  const idToPath = new Map([["listPets", "get-/v1/pets"]]);
+  const input = "````\n```\n(#listPets)\n```\n````";
+  const result = rewriteOperationIdRefs(input, idToPath);
+  assertEquals(result, input);
+});

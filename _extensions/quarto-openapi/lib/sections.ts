@@ -67,14 +67,19 @@ export function buildOperationIdToPathMap(spec: OpenAPISpec): Map<string, string
  */
 export function rewriteOperationIdRefs(text: string, idToPath: Map<string, string>): string {
   const lines = text.split("\n");
-  let inFence = false;
+  let fenceLen = 0; // 0 = not in fence; >0 = length of opening backtick run
 
   for (let i = 0; i < lines.length; i++) {
-    if (/^```/.test(lines[i])) {
-      inFence = !inFence;
+    const fenceMatch = /^(`{3,})/.exec(lines[i]);
+    if (fenceMatch) {
+      if (fenceLen === 0) {
+        fenceLen = fenceMatch[1].length; // open
+      } else if (fenceMatch[1].length >= fenceLen) {
+        fenceLen = 0; // close
+      }
       continue;
     }
-    if (inFence) continue;
+    if (fenceLen > 0) continue;
 
     // Replace fragments outside inline code spans.
     // Split line by backtick-delimited segments; only rewrite odd-indexed (non-code) parts.
