@@ -391,3 +391,15 @@ Deno.test("renderSchema: top-level primitive map renders 'Map of string to <type
 
   assertStringIncludes(output, "Map of string to string");
 });
+
+Deno.test("renderSchema: top-level any map renders 'Map of string to any'", () => {
+  const spec = specWithSchemas();
+  const schema: Schema = {
+    type: "object",
+    additionalProperties: true,
+  };
+
+  const output = rendered(spec, schema);
+
+  assertStringIncludes(output, "Map of string to any");
+});
