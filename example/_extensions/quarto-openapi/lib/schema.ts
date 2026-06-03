@@ -42,6 +42,14 @@ export function renderSchema(
     return renderArray(spec, resolved, lines);
   }
 
+  if (
+    !resolved.properties &&
+    resolved.additionalProperties !== undefined &&
+    resolved.additionalProperties !== false
+  ) {
+    return renderMap(spec, resolved, lines);
+  }
+
   if (type === "object" || resolved.properties) {
     return renderObject(spec, resolved, lines);
   }
@@ -117,6 +125,33 @@ function renderArray(
     lines.push(`Array of ${itemType}`);
   }
 
+  return lines;
+}
+
+function renderMap(
+  spec: OpenAPISpec,
+  schema: Schema,
+  lines: string[],
+): string[] {
+  const ap = schema.additionalProperties!;
+  if (typeof ap === "boolean") {
+    if (ap === true) {
+      lines.push("Map of string to any");
+    }
+    return lines;
+  }
+  const valueSchema = isReference(ap) ? resolve<Schema>(spec, ap) : ap;
+  if (
+    valueSchema.type === "object" ||
+    valueSchema.properties ||
+    valueSchema.allOf
+  ) {
+    lines.push("Map of string to object:");
+    lines.push("");
+    lines.push(...renderSchema(spec, valueSchema));
+  } else {
+    lines.push(`Map of string to ${formatPrimitiveType(valueSchema)}`);
+  }
   return lines;
 }
 
@@ -231,6 +266,42 @@ function flattenProperties(
           description: buildDescription(resolved, requiredSet.has(name)),
         });
       }
+    } else if (
+      !resolved.properties &&
+      resolved.additionalProperties !== undefined &&
+      resolved.additionalProperties !== false
+    ) {
+      // Typed map: additionalProperties is a schema, $ref, or `true`.
+      const ap = resolved.additionalProperties;
+      const valueType = mapValueTypeLabel(spec, ap);
+      rows.push({
+        name: nameCell,
+        type: `\`map[string, ${valueType}]\``,
+        description: buildDescription(resolved, requiredSet.has(name)),
+      });
+      if (ap !== true) {
+        const valueSchema = isReference(ap) ? resolve<Schema>(spec, ap) : ap;
+        if (
+          valueSchema.type === "object" ||
+          valueSchema.properties ||
+          valueSchema.allOf
+        ) {
+          const effective = valueSchema.allOf
+            ? mergeAllOf(spec, valueSchema.allOf)
+            : valueSchema;
+          if (effective.properties) {
+            rows.push(
+              ...flattenProperties(
+                spec,
+                effective.properties,
+                effective.required,
+                `${displayName}{}`,
+                depth + 1,
+              ),
+            );
+          }
+        }
+      }
     } else {
       rows.push({
         name: nameCell,
@@ -274,6 +345,19 @@ function buildDescription(schema: Schema, isRequired: boolean): string {
 }
 
 const semanticFormats = new Set(["date-time", "date", "time", "duration", "uuid", "uri", "uri-reference", "email", "hostname", "ipv4", "ipv6", "byte", "binary", "password"]);
+
+function mapValueTypeLabel(
+  _spec: OpenAPISpec,
+  value: Schema | Reference | boolean,
+): string {
+  if (value === true) return "any";
+  if (value === false) return "object";
+  if (isReference(value)) {
+    return value.$ref.split("/").pop() || "object";
+  }
+  if (value.type === "object" || value.properties || value.allOf) return "object";
+  return value.type || "object";
+}
 
 function formatTypeString(schema: Schema): string {
   let type = schema.type || "unknown";
