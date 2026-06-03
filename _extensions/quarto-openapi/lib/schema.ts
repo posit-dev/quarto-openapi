@@ -42,6 +42,14 @@ export function renderSchema(
     return renderArray(spec, resolved, lines);
   }
 
+  if (
+    !resolved.properties &&
+    resolved.additionalProperties !== undefined &&
+    resolved.additionalProperties !== false
+  ) {
+    return renderMap(spec, resolved, lines);
+  }
+
   if (type === "object" || resolved.properties) {
     return renderObject(spec, resolved, lines);
   }
@@ -117,6 +125,33 @@ function renderArray(
     lines.push(`Array of ${itemType}`);
   }
 
+  return lines;
+}
+
+function renderMap(
+  spec: OpenAPISpec,
+  schema: Schema,
+  lines: string[],
+): string[] {
+  const ap = schema.additionalProperties!;
+  if (typeof ap === "boolean") {
+    if (ap === true) {
+      lines.push("Map of string to any");
+    }
+    return lines;
+  }
+  const valueSchema = isReference(ap) ? resolve<Schema>(spec, ap) : ap;
+  if (
+    valueSchema.type === "object" ||
+    valueSchema.properties ||
+    valueSchema.allOf
+  ) {
+    lines.push("Map of string to object:");
+    lines.push("");
+    lines.push(...renderSchema(spec, valueSchema));
+  } else {
+    lines.push(`Map of string to ${formatPrimitiveType(valueSchema)}`);
+  }
   return lines;
 }
 

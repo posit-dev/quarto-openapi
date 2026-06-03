@@ -360,3 +360,34 @@ Deno.test("flattenProperties: any-valued map renders map[string, any]", () => {
   assertStringIncludes(output, "`config`");
   assertStringIncludes(output, "map[string, any]");
 });
+
+Deno.test("renderSchema: top-level $ref map renders 'Map of' and the value table", () => {
+  const spec = specWithSchemas({
+    WindowCounts: {
+      type: "object",
+      properties: { total: { type: "integer", description: "Total" } },
+    },
+  });
+  const schema: Schema = {
+    type: "object",
+    additionalProperties: { $ref: "#/components/schemas/WindowCounts" },
+  };
+
+  const output = rendered(spec, schema);
+
+  assertStringIncludes(output, "Map of string to object");
+  assertStringIncludes(output, "`total`");
+  assertStringIncludes(output, "Total");
+});
+
+Deno.test("renderSchema: top-level primitive map renders 'Map of string to <type>'", () => {
+  const spec = specWithSchemas();
+  const schema: Schema = {
+    type: "object",
+    additionalProperties: { type: "string" },
+  };
+
+  const output = rendered(spec, schema);
+
+  assertStringIncludes(output, "Map of string to string");
+});
