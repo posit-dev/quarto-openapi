@@ -302,3 +302,104 @@ Deno.test("renderSchema: nullable with suppressed format renders type|null witho
   assertStringIncludes(output, "`integer|null`");
   assert(!output.includes("int64"), "int64 should be suppressed even when nullable");
 });
+
+Deno.test("flattenProperties: $ref-valued map renders map row and recurses into value", () => {
+  const spec = specWithSchemas({
+    WindowCounts: {
+      type: "object",
+      properties: { total: { type: "integer", description: "Total" } },
+    },
+  });
+  const schema: Schema = {
+    type: "object",
+    properties: {
+      windows: {
+        type: "object",
+        description: "Counts by window",
+        additionalProperties: { $ref: "#/components/schemas/WindowCounts" },
+      },
+    },
+  };
+
+  const output = rendered(spec, schema);
+
+  assertStringIncludes(output, "`windows`");
+  assertStringIncludes(output, "map[string, WindowCounts]");
+  assertStringIncludes(output, "Counts by window");
+  // recurses into the value schema's properties
+  assertStringIncludes(output, "windows{}.total");
+  assertStringIncludes(output, "Total");
+});
+
+Deno.test("flattenProperties: primitive-valued map renders typed map row", () => {
+  const spec = specWithSchemas();
+  const schema: Schema = {
+    type: "object",
+    properties: {
+      flags: { type: "object", additionalProperties: { type: "boolean" } },
+    },
+  };
+
+  const output = rendered(spec, schema);
+
+  assertStringIncludes(output, "`flags`");
+  assertStringIncludes(output, "map[string, boolean]");
+});
+
+Deno.test("flattenProperties: any-valued map renders map[string, any]", () => {
+  const spec = specWithSchemas();
+  const schema: Schema = {
+    type: "object",
+    properties: {
+      config: { type: "object", additionalProperties: true },
+    },
+  };
+
+  const output = rendered(spec, schema);
+
+  assertStringIncludes(output, "`config`");
+  assertStringIncludes(output, "map[string, any]");
+});
+
+Deno.test("renderSchema: top-level $ref map renders 'Map of' and the value table", () => {
+  const spec = specWithSchemas({
+    WindowCounts: {
+      type: "object",
+      properties: { total: { type: "integer", description: "Total" } },
+    },
+  });
+  const schema: Schema = {
+    type: "object",
+    additionalProperties: { $ref: "#/components/schemas/WindowCounts" },
+  };
+
+  const output = rendered(spec, schema);
+
+  assertStringIncludes(output, "Map of string to object");
+  assertStringIncludes(output, "`total`");
+  assertStringIncludes(output, "Total");
+});
+
+Deno.test("renderSchema: top-level primitive map renders 'Map of string to <type>'", () => {
+  const spec = specWithSchemas();
+  const schema: Schema = {
+    type: "object",
+    additionalProperties: { type: "string" },
+  };
+
+  const output = rendered(spec, schema);
+
+  assertStringIncludes(output, "Map of string to string");
+});
+
+Deno.test("renderSchema: top-level any map renders 'Map of string to any'", () => {
+  const spec = specWithSchemas();
+  const schema: Schema = {
+    type: "object",
+    additionalProperties: true,
+  };
+
+  const output = rendered(spec, schema);
+
+  assertStringIncludes(output, "Map of string to any");
+});
