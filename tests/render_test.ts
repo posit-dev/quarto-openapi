@@ -1,4 +1,6 @@
 import {
+  assert,
+  assertFalse,
   assertStringIncludes,
 } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
@@ -70,8 +72,75 @@ Deno.test("renderSection: deprecated endpoint shows callout", () => {
 
   const output = renderedSection(spec);
 
-  assertStringIncludes(output, ".callout-warning");
+  assertStringIncludes(output, '.callout-warning title="Deprecated"');
   assertStringIncludes(output, "deprecated");
+});
+
+Deno.test("renderSection: experimental endpoint shows callout", () => {
+  const spec = minimalSpec({
+    "/v1/experimental/widgets": {
+      get: {
+        operationId: "listWidgets",
+        summary: "List widgets",
+        "x-experimental": true,
+        responses: { "200": { description: "OK" } },
+      },
+    },
+  });
+
+  const output = renderedSection(spec);
+
+  assertStringIncludes(output, '.callout-note title="Experimental"');
+  assertStringIncludes(output, "experimental");
+});
+
+Deno.test("renderSection: non-experimental endpoint shows no experimental callout", () => {
+  const spec = minimalSpec({
+    "/v1/pets": {
+      get: {
+        operationId: "listPets",
+        summary: "List pets",
+        responses: { "200": { description: "OK" } },
+      },
+    },
+  });
+
+  const output = renderedSection(spec);
+
+  assertFalse(output.includes(".callout-note"));
+});
+
+Deno.test("renderSection: deprecated + experimental shows both callouts, deprecated first and before description", () => {
+  const spec = minimalSpec({
+    "/v1/experimental/bootstrap": {
+      post: {
+        operationId: "bootstrap",
+        summary: "Bootstrap",
+        description: "DESCRIPTION_MARKER body text.",
+        deprecated: true,
+        "x-experimental": true,
+        responses: { "200": { description: "OK" } },
+      },
+    },
+  });
+
+  const output = renderedSection(spec);
+
+  assertStringIncludes(output, ".callout-warning");
+  assertStringIncludes(output, ".callout-note");
+
+  const warningIndex = output.indexOf(".callout-warning");
+  const noteIndex = output.indexOf(".callout-note");
+  const descriptionIndex = output.indexOf("DESCRIPTION_MARKER");
+
+  assert(
+    warningIndex < noteIndex,
+    "deprecated callout should render before experimental",
+  );
+  assert(
+    noteIndex < descriptionIndex,
+    "callouts should render before the description",
+  );
 });
 
 Deno.test("renderSection: parameters rendered as grid table", () => {
