@@ -297,10 +297,20 @@ function renderEndpoint(spec: OpenAPISpec, endpoint: Endpoint, options: RenderOp
   lines.push(`\`${methodBadge(method)} ${path}\``);
   lines.push("");
 
-  // Deprecated badge
+  // Deprecated callout
   if (operation.deprecated) {
-    lines.push("::: {.callout-warning}");
+    lines.push('::: {.callout-warning title="Deprecated"}');
     lines.push("This endpoint is deprecated.");
+    lines.push(":::");
+    lines.push("");
+  }
+
+  // Experimental callout
+  if (operation["x-experimental"]) {
+    lines.push('::: {.callout-note title="Experimental"}');
+    lines.push(
+      "This endpoint is experimental and may change or be removed in a future release without notice.",
+    );
     lines.push(":::");
     lines.push("");
   }

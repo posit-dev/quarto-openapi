@@ -99,6 +99,7 @@ The single output page contains:
 - Endpoints (`###`) per operation, each with:
   - Method and path as inline code (e.g., `` `PUT /board/{row}/{column}` ``)
   - Deprecated callout (if `deprecated: true`)
+  - Experimental callout (if the `x-experimental: true` extension is set)
   - Description (may contain rich markdown from the spec)
   - Parameters table grouped by location (path, query, header, cookie)
   - Request body schema table
