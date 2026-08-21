@@ -1,9 +1,16 @@
 import {
+  assert,
   assertEquals,
 } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
+  renderApiReferenceBody,
   rewriteOperationIdRefs,
 } from "../_extensions/quarto-openapi/lib/sections.ts";
+import {
+  TABLE_DIV_CLOSE,
+  TABLE_DIV_OPEN,
+} from "../_extensions/quarto-openapi/lib/markdown.ts";
+import type { OpenAPISpec } from "../_extensions/quarto-openapi/lib/types.ts";
 
 Deno.test("rewriteOperationIdRefs: rewrites matching operationId fragment", () => {
   const idToPath = new Map([["listPets", "get-/v1/pets"]]);
@@ -97,4 +104,84 @@ Deno.test("rewriteOperationIdRefs: quarto-style fenced code block skips content"
   const input = '```{python}\n# see (#listPets)\nprint("hello")\n```';
   const result = rewriteOperationIdRefs(input, idToPath);
   assertEquals(result, input);
+});
+
+function specWithRequestBodyDescription(description: string): OpenAPISpec {
+  return {
+    openapi: "3.0.3",
+    info: { title: "Test", version: "1.0.0" },
+    paths: {
+      "/v1/pets": {
+        get: {
+          operationId: "listPets",
+          responses: { "200": { description: "OK" } },
+        },
+      },
+      "/v1/adoptions": {
+        post: {
+          operationId: "createAdoption",
+          requestBody: {
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["pet_id"],
+                  properties: {
+                    pet_id: { type: "string", description },
+                  },
+                },
+              },
+            },
+          },
+          responses: { "200": { description: "OK" } },
+        },
+      },
+    },
+  };
+}
+
+function findTableBlocks(text: string): string[][] {
+  const lines = text.split("\n");
+  const blocks: string[][] = [];
+  let current: string[] | null = null;
+  for (const line of lines) {
+    if (line === TABLE_DIV_OPEN) {
+      current = [];
+      continue;
+    }
+    if (line === TABLE_DIV_CLOSE && current !== null) {
+      blocks.push(current);
+      current = null;
+      continue;
+    }
+    if (current !== null) current.push(line);
+  }
+  return blocks;
+}
+
+Deno.test("renderApiReferenceBody: rewritten link in a request body table stays well-formed", () => {
+  const spec = specWithRequestBodyDescription(
+    "The ID of the pet to adopt. Obtain it from the " +
+      "[GET /v1/pets](#listPets) endpoint before creating an adoption.",
+  );
+  spec.info.description = "See [pet listing](#listPets).";
+
+  const output = renderApiReferenceBody(spec, "path").join("\n") + "\n";
+
+  const block = findTableBlocks(output).find((b) => b.some((l) => l.includes("pet_id")));
+  assert(block, "expected to find the pet_id property table in the rendered output");
+  for (const line of block) {
+    assertEquals(line.length, block[0].length, `off-width line: ${JSON.stringify(line)}`);
+  }
+  assert(
+    block.some((l) => l.includes("#get-/v1/pets")),
+    "expected the operationId anchor to be rewritten to its path-style form",
+  );
+
+  // main() renders spec.info.description after this call, so the rewrite must be in place.
+  assertEquals(
+    spec.info.description,
+    "See [pet listing](#get-/v1/pets).",
+    "spec.info.description should be rewritten in place",
+  );
 });

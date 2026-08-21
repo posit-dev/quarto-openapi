@@ -7,6 +7,9 @@ import {
   heading,
   pathToAnchor,
   sanitizeId,
+  TABLE_DIV_CLOSE,
+  TABLE_DIV_OPEN,
+  type TableRow,
 } from "../_extensions/quarto-openapi/lib/markdown.ts";
 
 Deno.test("gridTable: produces valid Pandoc grid table syntax", () => {
@@ -70,4 +73,18 @@ Deno.test("pathToAnchor: replaces braces with dashes", () => {
     pathToAnchor("get", "/v1/content/{guid}"),
     "get-/v1/content/-guid-",
   );
+});
+
+Deno.test("gridTable: every emitted line has the same length", () => {
+  const rows: TableRow[] = [
+    { cells: ["`temp_ticket`", "`string`", "See [ref](#get-/v1/some/path) for details."] },
+  ];
+
+  const lines = gridTable(["Name", "Type", "Description"], rows).filter(
+    (l) => l !== TABLE_DIV_OPEN && l !== TABLE_DIV_CLOSE,
+  );
+
+  for (const line of lines) {
+    assertEquals(line.length, lines[0].length, `off-width line: ${JSON.stringify(line)}`);
+  }
 });

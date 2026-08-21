@@ -15,7 +15,7 @@
 import { parse as parseYaml, stringify as stringifyYaml } from "stdlib/yaml";
 import { join, dirname, extname } from "stdlib/path";
 import type { OpenAPISpec } from "./lib/types.ts";
-import { groupByResource, renderSection, buildOperationIdToPathMap, rewriteOperationIdRefs, type RenderOptions } from "./lib/sections.ts";
+import { groupByResource, renderApiReferenceBody } from "./lib/sections.ts";
 
 type AnchorStyle = "operation-id" | "path";
 
@@ -70,7 +70,6 @@ async function main() {
     Deno.exit(1);
   }
   const anchorStyle: AnchorStyle = config["anchor-style"] ?? "operation-id";
-  const renderOptions: RenderOptions = { anchorStyle };
 
   // Load the OpenAPI spec
   const specPath = join(projectDir, config.spec);
@@ -102,7 +101,10 @@ async function main() {
     `Schemas: ${Object.keys(spec.components?.schemas || {}).length}`,
   );
 
-  // Group endpoints by resource
+  // Render the body first: it rewrites the spec's descriptions in place,
+  // including spec.info.description used below.
+  const body = renderApiReferenceBody(spec, anchorStyle);
+
   const sections = groupByResource(spec);
   console.log(
     `Sections: ${sections.map((s) => `${s.name} (${s.endpoints.length})`).join(", ")}`,
@@ -132,17 +134,9 @@ async function main() {
   }
 
   // Sections
-  for (const section of sections) {
-    lines.push(...renderSection(spec, section, renderOptions));
-  }
+  lines.push(...body);
 
-  // When using path-style anchors, rewrite any operationId cross-references
-  // (e.g. (#getTask)) in descriptions and schema docs to path-style anchors.
-  let output = lines.join("\n") + "\n";
-  if (anchorStyle === "path") {
-    const idToPath = buildOperationIdToPathMap(spec);
-    output = rewriteOperationIdRefs(output, idToPath);
-  }
+  const output = lines.join("\n") + "\n";
 
   // Write output
   const outputPath = join(projectDir, config.output);
