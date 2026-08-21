@@ -101,6 +101,48 @@ export function rewriteOperationIdRefs(text: string, idToPath: Map<string, strin
 }
 
 /**
+ * Rewrite operationId refs in every description and summary field of the
+ * spec, in place. Runs before any rendering so tables are laid out with
+ * final text (see gridTable).
+ */
+export function rewriteSpecRefs(spec: OpenAPISpec, idToPath: Map<string, string>): void {
+  const walk = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      for (const item of node) walk(item);
+      return;
+    }
+    if (node === null || typeof node !== "object") return;
+    for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+      if ((key === "description" || key === "summary") && typeof value === "string") {
+        (node as Record<string, unknown>)[key] = rewriteOperationIdRefs(value, idToPath);
+      } else {
+        walk(value);
+      }
+    }
+  };
+  walk(spec);
+}
+
+/**
+ * Render the full API reference body: rewrite spec refs for the requested
+ * anchor style (mutating the spec), then render every resource section.
+ * Both openapi-to-markdown.ts and the tests go through this entry point.
+ */
+export function renderApiReferenceBody(
+  spec: OpenAPISpec,
+  anchorStyle: RenderOptions["anchorStyle"],
+): string[] {
+  if (anchorStyle === "path") {
+    rewriteSpecRefs(spec, buildOperationIdToPathMap(spec));
+  }
+  const lines: string[] = [];
+  for (const section of groupByResource(spec)) {
+    lines.push(...renderSection(spec, section, { anchorStyle }));
+  }
+  return lines;
+}
+
+/**
  * Extract the resource name from a path.
  * /v1/content/{guid}/bundles -> "content"
  * /v1/audit_logs -> "audit-logs"
