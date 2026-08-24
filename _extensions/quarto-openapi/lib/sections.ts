@@ -20,7 +20,7 @@ import {
   heading,
   methodBadge,
   pathToAnchor,
-  gridTable,
+  listTable,
   type TableRow,
 } from "./markdown.ts";
 
@@ -102,8 +102,8 @@ export function rewriteOperationIdRefs(text: string, idToPath: Map<string, strin
 
 /**
  * Rewrite operationId refs in every description and summary field of the
- * spec, in place. Runs before any rendering so tables are laid out with
- * final text (see gridTable).
+ * spec, in place. Runs before any rendering so every sink — prose, tables,
+ * tabsets — sees the same rewritten text.
  */
 export function rewriteSpecRefs(spec: OpenAPISpec, idToPath: Map<string, string>): void {
   const walk = (node: unknown): void => {
@@ -444,7 +444,7 @@ function renderParameters(
       };
     });
 
-    lines.push(...gridTable(["Name", "Type", "Description"], rows));
+    lines.push(...listTable(["Name", "Type", "Description"], rows));
     lines.push("");
   }
 

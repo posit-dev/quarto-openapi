@@ -9,7 +9,7 @@ import type { Schema, Reference } from "./types.ts";
 import { isReference } from "./types.ts";
 import type { OpenAPISpec } from "./types.ts";
 import { resolve } from "./refs.ts";
-import { gridTable, type TableRow } from "./markdown.ts";
+import { listTable, type TableRow } from "./markdown.ts";
 
 interface PropertyRow {
   name: string;
@@ -172,7 +172,7 @@ function renderObject(
     cells: [row.name, row.type, row.description],
   }));
 
-  lines.push(...gridTable(["Name", "Type", "Description"], tableRows));
+  lines.push(...listTable(["Name", "Type", "Description"], tableRows));
   return lines;
 }
 
