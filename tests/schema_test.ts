@@ -404,3 +404,28 @@ test("renderSchema: top-level any map renders 'Map of string to any'", () => {
 
   assertStringIncludes(output, "Map of string to any");
 });
+
+test("renderSchema: an empty-string default renders as a visible empty string", () => {
+  const spec = specWithSchemas();
+  const schema: Schema = {
+    type: "object",
+    properties: { prefix: { type: "string", default: "" } },
+  };
+
+  const output = rendered(spec, schema);
+
+  // An empty code span would render as nothing at all
+  assertStringIncludes(output, 'Default: `""`');
+});
+
+test("renderSchema: enum values go through the same formatter as defaults", () => {
+  const spec = specWithSchemas();
+  const schema: Schema = {
+    type: "object",
+    properties: { mode: { type: "string", enum: ["", "fast", null] } },
+  };
+
+  const output = rendered(spec, schema);
+
+  assertStringIncludes(output, 'Enum: `""`, `fast`, `null`');
+});

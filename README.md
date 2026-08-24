@@ -6,6 +6,9 @@ The extension runs as a pre-render script: it reads your OpenAPI spec and genera
 
 ## Requirements
 
+Quarto 1.9 or later, or Quarto 2. Tables are emitted as list tables, which
+earlier 1.x releases render as bullet lists.
+
 The pre-render script runs on Node.js 22.6 or later, which Quarto must be able
 to find on `PATH` (or via `QUARTO_NODE`), and npm to install its one
 dependency. Quarto 2 runs `.ts` render scripts with Node directly; Quarto 1
@@ -140,7 +143,8 @@ quarto-openapi/
         refs.ts                 # $ref resolution
         sections.ts             # path grouping and endpoint rendering
         schema.ts               # schema-to-table conversion
-        markdown.ts             # grid table and markdown utilities
+        markdown.ts             # list table and markdown utilities
+        escape.ts               # makes description prose safe as markdown
   tests/                        # node:test suites for lib/
   scripts/
     sync-example.ts             # copies the extension into example/
@@ -171,6 +175,23 @@ installs its own.
 Only TypeScript syntax that Node can erase is allowed, since Node strips types
 rather than compiling them — no `enum`, `namespace`, or parameter properties.
 `tsconfig.json` sets `erasableSyntaxOnly` to catch this at typecheck time.
+
+## How descriptions are escaped
+
+OpenAPI descriptions are CommonMark written for arbitrary renderers, so they
+contain constructs Quarto reads as markup. Three rewrites run over them before
+anything is rendered, each skipping inline code spans and fenced code blocks:
+
+| In the spec | In the output | Why |
+|---|---|---|
+| `[start, start+interval)` | `\[start, start+interval)` | an unclosed `[` opens a span, which Quarto 2 rejects |
+| `/v1/users/{guid}/keys` | `/v1/users/\{guid\}/keys` | `{...}` is Quarto's attribute syntax |
+| `<a href="/x">bundle</a>` | `` `<a href="/x">`{=html}bundle`</a>`{=html} `` | Quarto makes it a raw inline anyway, and warns once per element per page |
+
+All three render identically to the unescaped text. CommonMark autolinks
+(`<https://example.com>`, `<user@example.com>`) and comparisons (`a < b`) are
+left alone, and braces and brackets inside code render verbatim, so a path
+written as `` `GET /v1/users/{guid}/keys` `` keeps its braces.
 
 ## Limitations
 
