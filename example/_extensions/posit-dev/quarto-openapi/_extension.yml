@@ -6,7 +6,7 @@ contributes:
   metadata:
     project:
       pre-render:
-        - _extensions/quarto-openapi/openapi-to-markdown.ts
+        - _extensions/posit-dev/quarto-openapi/openapi-to-markdown.ts
   format:
     html:
       css:

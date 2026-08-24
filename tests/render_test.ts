@@ -1,8 +1,9 @@
+import { test } from "node:test";
 import {
   assert,
   assertFalse,
   assertStringIncludes,
-} from "https://deno.land/std@0.224.0/assert/mod.ts";
+} from "./assert.ts";
 import {
   groupByResource,
   renderSection,
@@ -23,7 +24,7 @@ function renderedSection(spec: OpenAPISpec, sectionIndex = 0): string {
   return renderSection(spec, sections[sectionIndex]).join("\n");
 }
 
-Deno.test("renderSection: section heading uses tag name", () => {
+test("renderSection: section heading uses tag name", () => {
   const spec = minimalSpec({
     "/v1/pets": {
       get: {
@@ -40,7 +41,7 @@ Deno.test("renderSection: section heading uses tag name", () => {
   assertStringIncludes(output, "## Pets");
 });
 
-Deno.test("renderSection: endpoint heading uses summary and operationId anchor", () => {
+test("renderSection: endpoint heading uses summary and operationId anchor", () => {
   const spec = minimalSpec({
     "/v1/pets": {
       get: {
@@ -58,7 +59,7 @@ Deno.test("renderSection: endpoint heading uses summary and operationId anchor",
   assertStringIncludes(output, "`GET /v1/pets`");
 });
 
-Deno.test("renderSection: deprecated endpoint shows callout", () => {
+test("renderSection: deprecated endpoint shows callout", () => {
   const spec = minimalSpec({
     "/v1/old": {
       get: {
@@ -76,7 +77,7 @@ Deno.test("renderSection: deprecated endpoint shows callout", () => {
   assertStringIncludes(output, "deprecated");
 });
 
-Deno.test("renderSection: experimental endpoint shows callout", () => {
+test("renderSection: experimental endpoint shows callout", () => {
   const spec = minimalSpec({
     "/v1/experimental/widgets": {
       get: {
@@ -94,7 +95,7 @@ Deno.test("renderSection: experimental endpoint shows callout", () => {
   assertStringIncludes(output, "experimental");
 });
 
-Deno.test("renderSection: non-experimental endpoint shows no experimental callout", () => {
+test("renderSection: non-experimental endpoint shows no experimental callout", () => {
   const spec = minimalSpec({
     "/v1/pets": {
       get: {
@@ -110,7 +111,7 @@ Deno.test("renderSection: non-experimental endpoint shows no experimental callou
   assertFalse(output.includes(".callout-note"));
 });
 
-Deno.test("renderSection: deprecated + experimental shows both callouts, deprecated first and before description", () => {
+test("renderSection: deprecated + experimental shows both callouts, deprecated first and before description", () => {
   const spec = minimalSpec({
     "/v1/experimental/bootstrap": {
       post: {
@@ -143,7 +144,7 @@ Deno.test("renderSection: deprecated + experimental shows both callouts, depreca
   );
 });
 
-Deno.test("renderSection: parameters rendered as grid table", () => {
+test("renderSection: parameters rendered as grid table", () => {
   const spec = minimalSpec({
     "/v1/pets": {
       get: {
@@ -169,7 +170,7 @@ Deno.test("renderSection: parameters rendered as grid table", () => {
   assertStringIncludes(output, "Max items");
 });
 
-Deno.test("renderSection: parameters heading has scoped anchor ID", () => {
+test("renderSection: parameters heading has scoped anchor ID", () => {
   const spec = minimalSpec({
     "/v1/pets": {
       get: {
@@ -192,7 +193,7 @@ Deno.test("renderSection: parameters heading has scoped anchor ID", () => {
   assertStringIncludes(output, '#### Parameters {id="listPets-parameters"}');
 });
 
-Deno.test("renderSection: request body schema rendered", () => {
+test("renderSection: request body schema rendered", () => {
   const spec = minimalSpec({
     "/v1/pets": {
       post: {
@@ -222,7 +223,7 @@ Deno.test("renderSection: request body schema rendered", () => {
   assertStringIncludes(output, "Pet name");
 });
 
-Deno.test("renderSection: request body heading has scoped anchor ID", () => {
+test("renderSection: request body heading has scoped anchor ID", () => {
   const spec = minimalSpec({
     "/v1/pets": {
       post: {
@@ -250,7 +251,7 @@ Deno.test("renderSection: request body heading has scoped anchor ID", () => {
   assertStringIncludes(output, '#### Request body {id="createPet-request-body"}');
 });
 
-Deno.test("renderSection: responses heading has scoped anchor ID", () => {
+test("renderSection: responses heading has scoped anchor ID", () => {
   const spec = minimalSpec({
     "/v1/pets": {
       get: {
@@ -266,7 +267,7 @@ Deno.test("renderSection: responses heading has scoped anchor ID", () => {
   assertStringIncludes(output, '#### Responses {id="listPets-responses"}');
 });
 
-Deno.test("renderSection: multiple responses render as tabset", () => {
+test("renderSection: multiple responses render as tabset", () => {
   const spec = minimalSpec({
     "/v1/pets/{id}": {
       get: {
@@ -287,7 +288,7 @@ Deno.test("renderSection: multiple responses render as tabset", () => {
   assertStringIncludes(output, "**404**: Not found");
 });
 
-Deno.test("renderSection: response code tab headings have scoped anchor IDs", () => {
+test("renderSection: response code tab headings have scoped anchor IDs", () => {
   const spec = minimalSpec({
     "/v1/pets/{id}": {
       get: {
@@ -307,7 +308,7 @@ Deno.test("renderSection: response code tab headings have scoped anchor IDs", ()
   assertStringIncludes(output, '##### 404 {id="getPet-404"}');
 });
 
-Deno.test("renderSection: sub-heading anchors fall back to method+path slug without operationId", () => {
+test("renderSection: sub-heading anchors fall back to method+path slug without operationId", () => {
   const spec = minimalSpec({
     "/v1/pets": {
       get: {
@@ -338,7 +339,7 @@ Deno.test("renderSection: sub-heading anchors fall back to method+path slug with
   assertStringIncludes(output, '##### 400 {id="get-/v1/pets-400"}');
 });
 
-Deno.test("renderSection: anchor-style path forces path anchors even with operationId", () => {
+test("renderSection: anchor-style path forces path anchors even with operationId", () => {
   const spec = minimalSpec({
     "/v1/pets": {
       get: {
@@ -356,7 +357,7 @@ Deno.test("renderSection: anchor-style path forces path anchors even with operat
   assertStringIncludes(output, '{id="get-/v1/pets"}');
 });
 
-Deno.test("renderSection: anchor-style path propagates to sub-anchors", () => {
+test("renderSection: anchor-style path propagates to sub-anchors", () => {
   const spec = minimalSpec({
     "/v1/pets": {
       get: {
@@ -383,7 +384,7 @@ Deno.test("renderSection: anchor-style path propagates to sub-anchors", () => {
   assertStringIncludes(output, '##### 400 {id="get-/v1/pets-400"}');
 });
 
-Deno.test("renderSection: explicit anchor-style operation-id uses operationId", () => {
+test("renderSection: explicit anchor-style operation-id uses operationId", () => {
   const spec = minimalSpec({
     "/v1/pets": {
       get: {
@@ -401,7 +402,7 @@ Deno.test("renderSection: explicit anchor-style operation-id uses operationId", 
   assertStringIncludes(output, '{id="listPets"}');
 });
 
-Deno.test("renderSection: path-level parameters merged into operations", () => {
+test("renderSection: path-level parameters merged into operations", () => {
   const spec: OpenAPISpec = {
     openapi: "3.0.3",
     info: { title: "Test", version: "1.0.0" },
@@ -431,7 +432,7 @@ Deno.test("renderSection: path-level parameters merged into operations", () => {
   assertStringIncludes(output, "Pet ID");
 });
 
-Deno.test("renderSection: untagged fallback section heading is title-cased", () => {
+test("renderSection: untagged fallback section heading is title-cased", () => {
   const spec = minimalSpec({
     "/v1/audit_logs": {
       get: {
@@ -448,7 +449,7 @@ Deno.test("renderSection: untagged fallback section heading is title-cased", () 
   assertStringIncludes(output, "## Audit Logs");
 });
 
-Deno.test("renderSection: description headings shift below endpoint level", () => {
+test("renderSection: description headings shift below endpoint level", () => {
   const spec = minimalSpec({
     "/v1/users": {
       get: {
@@ -466,7 +467,7 @@ Deno.test("renderSection: description headings shift below endpoint level", () =
   assertStringIncludes(output, "#### CSV export");
 });
 
-Deno.test("renderSection: description heading hierarchy is preserved", () => {
+test("renderSection: description heading hierarchy is preserved", () => {
   const spec = minimalSpec({
     "/v1/users": {
       get: {
@@ -486,7 +487,7 @@ Deno.test("renderSection: description heading hierarchy is preserved", () => {
   assertStringIncludes(output, "##### Filters");
 });
 
-Deno.test("renderSection: description without headings passes through unchanged", () => {
+test("renderSection: description without headings passes through unchanged", () => {
   const spec = minimalSpec({
     "/v1/users": {
       get: {
@@ -503,7 +504,7 @@ Deno.test("renderSection: description without headings passes through unchanged"
   assertStringIncludes(output, "Returns a list of users.\n\nSupports pagination.");
 });
 
-Deno.test("renderSection: headings inside code blocks are not shifted", () => {
+test("renderSection: headings inside code blocks are not shifted", () => {
   const spec = minimalSpec({
     "/v1/users": {
       get: {

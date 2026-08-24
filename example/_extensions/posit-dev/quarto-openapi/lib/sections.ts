@@ -101,6 +101,48 @@ export function rewriteOperationIdRefs(text: string, idToPath: Map<string, strin
 }
 
 /**
+ * Rewrite operationId refs in every description and summary field of the
+ * spec, in place. Runs before any rendering so tables are laid out with
+ * final text (see gridTable).
+ */
+export function rewriteSpecRefs(spec: OpenAPISpec, idToPath: Map<string, string>): void {
+  const walk = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      for (const item of node) walk(item);
+      return;
+    }
+    if (node === null || typeof node !== "object") return;
+    for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+      if ((key === "description" || key === "summary") && typeof value === "string") {
+        (node as Record<string, unknown>)[key] = rewriteOperationIdRefs(value, idToPath);
+      } else {
+        walk(value);
+      }
+    }
+  };
+  walk(spec);
+}
+
+/**
+ * Render the full API reference body: rewrite spec refs for the requested
+ * anchor style (mutating the spec), then render every resource section.
+ * Both openapi-to-markdown.ts and the tests go through this entry point.
+ */
+export function renderApiReferenceBody(
+  spec: OpenAPISpec,
+  anchorStyle: RenderOptions["anchorStyle"],
+): string[] {
+  if (anchorStyle === "path") {
+    rewriteSpecRefs(spec, buildOperationIdToPathMap(spec));
+  }
+  const lines: string[] = [];
+  for (const section of groupByResource(spec)) {
+    lines.push(...renderSection(spec, section, { anchorStyle }));
+  }
+  return lines;
+}
+
+/**
  * Extract the resource name from a path.
  * /v1/content/{guid}/bundles -> "content"
  * /v1/audit_logs -> "audit-logs"
@@ -297,10 +339,20 @@ function renderEndpoint(spec: OpenAPISpec, endpoint: Endpoint, options: RenderOp
   lines.push(`\`${methodBadge(method)} ${path}\``);
   lines.push("");
 
-  // Deprecated badge
+  // Deprecated callout
   if (operation.deprecated) {
-    lines.push("::: {.callout-warning}");
+    lines.push('::: {.callout-warning title="Deprecated"}');
     lines.push("This endpoint is deprecated.");
+    lines.push(":::");
+    lines.push("");
+  }
+
+  // Experimental callout
+  if (operation["x-experimental"]) {
+    lines.push('::: {.callout-note title="Experimental"}');
+    lines.push(
+      "This endpoint is experimental and may change or be removed in a future release without notice.",
+    );
     lines.push(":::");
     lines.push("");
   }
