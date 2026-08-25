@@ -19,12 +19,12 @@ interface Segment {
 
 /**
  * An opening code fence: three or more backticks or tildes at the start of a
- * line. CommonMark allows up to three spaces of indentation; more indentation
- * is accepted here because a fence inside a list-table cell is indented to the
- * item's content level, and a fence in an indented code block is literal code
- * either way.
+ * line, with any indentation. CommonMark allows up to three spaces, but a fence
+ * inside a list-table cell is indented to the item's content level, so a
+ * further-indented fence has to count too — see `fenceEnd` for the condition
+ * that keeps that from misreading an indented code block.
  */
-const FENCE_OPEN = /^[ \t]*(`{3,}|~{3,})/;
+const FENCE_OPEN = /^([ \t]*)(`{3,}|~{3,})/;
 
 /** A fence of the same character, at least as long, and nothing else. */
 const FENCE_CLOSE = /^[ \t]*(`{3,}|~{3,})[ \t]*$/;
@@ -44,7 +44,7 @@ function closesFence(line: string, marker: string): boolean {
 
 /**
  * Return the end of the fenced block opened by `marker` on the line at
- * `start`, including the closing fence. An unclosed block runs to the end.
+ * `start`, including the closing fence, or -1 when nothing closes it.
  */
 function fenceEnd(text: string, start: number, marker: string): number {
   let i = lineEnd(text, start);
@@ -54,7 +54,7 @@ function fenceEnd(text: string, start: number, marker: string): number {
     if (closesFence(text.slice(i, end), marker)) return end;
     i = end;
   }
-  return text.length;
+  return -1;
 }
 
 /**
@@ -74,12 +74,20 @@ function splitCode(text: string): Segment[] {
 
   while (i < text.length) {
     if (atLineStart) {
-      const marker = text.slice(i, lineEnd(text, i)).match(FENCE_OPEN)?.[1];
-      if (marker !== undefined) {
-        emit(i, false);
-        i = fenceEnd(text, i, marker);
-        emit(i, true);
-        continue;
+      const open = text.slice(i, lineEnd(text, i)).match(FENCE_OPEN);
+      if (open) {
+        const [, indent, marker] = open;
+        const end = fenceEnd(text, i, marker);
+        // An unclosed fence runs to the end of the text, except past three
+        // spaces of indentation: there a lone fence is the literal content of
+        // an indented code block, and reading it as an opener would swallow
+        // every rewrite in the prose that follows.
+        if (end !== -1 || indent.length <= 3) {
+          emit(i, false);
+          i = end === -1 ? text.length : end;
+          emit(i, true);
+          continue;
+        }
       }
     }
     const c = text[i];

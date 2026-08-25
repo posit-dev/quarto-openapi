@@ -144,3 +144,17 @@ test("escapePathBracesOutsideCode: leaves a path parameter inside a tilde fence 
   const text = "~~~bash\ncurl /v1/users/{guid}\n~~~\n";
   assertEquals(escapePathBracesOutsideCode(text), text);
 });
+
+test("escapePathBracesOutsideCode: an unclosed indented fence does not swallow prose", () => {
+  // At four spaces a lone fence is the literal content of an indented code
+  // block, so the prose after it still needs escaping.
+  assertEquals(
+    escapePathBracesOutsideCode("    ```\n\nThen call GET /v1/users/{id}."),
+    "    ```\n\nThen call GET /v1/users/\\{id\\}.",
+  );
+});
+
+test("escapeUnmatchedBrackets: an unclosed fence runs to the end of the text", () => {
+  const text = "Before.\n\n```json\n[1, 2}\n";
+  assertEquals(escapeUnmatchedBrackets(text), text);
+});
