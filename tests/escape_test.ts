@@ -106,3 +106,41 @@ test("escapeSpecDescriptions: leaves a bracket inside an HTML attribute alone", 
     '`<a href="/x?a[0]=1">`{=html}link`</a>`{=html}',
   );
 });
+
+test("escapeUnmatchedBrackets: leaves brackets inside a tilde fence alone", () => {
+  const text = 'Before.\n\n~~~json\n{"a": [1, 2}\n~~~\n\nAfter.';
+  assertEquals(escapeUnmatchedBrackets(text), text);
+});
+
+test("escapeUnmatchedBrackets: leaves brackets inside a long backtick fence alone", () => {
+  const text = 'Before.\n\n````md\n```\n[unclosed\n```\n````\n\nAfter.';
+  assertEquals(escapeUnmatchedBrackets(text), text);
+});
+
+test("escapeUnmatchedBrackets: leaves brackets inside an indented fence alone", () => {
+  // Cell content in a list table is indented to the item's content level.
+  const text = "  * Example:\n\n    ```json\n    [1, 2}\n    ```\n";
+  assertEquals(escapeUnmatchedBrackets(text), text);
+});
+
+test("markInlineHtmlExplicit: leaves tags inside a tilde fence alone", () => {
+  const text = "Render this:\n\n~~~html\n<div>x</div>\n~~~";
+  assertEquals(markInlineHtmlExplicit(text), text);
+});
+
+test("escapePathBracesOutsideCode: escapes parameter names with digits and hyphens", () => {
+  assertEquals(
+    escapePathBracesOutsideCode("See /v1/users/{user-id}/keys/{key2}."),
+    "See /v1/users/\\{user-id\\}/keys/\\{key2\\}.",
+  );
+});
+
+test("escapePathBracesOutsideCode: leaves a path parameter inside an indented fence alone", () => {
+  const text = "    ```bash\n    curl /v1/users/{user-id}\n    ```\n";
+  assertEquals(escapePathBracesOutsideCode(text), text);
+});
+
+test("escapePathBracesOutsideCode: leaves a path parameter inside a tilde fence alone", () => {
+  const text = "~~~bash\ncurl /v1/users/{guid}\n~~~\n";
+  assertEquals(escapePathBracesOutsideCode(text), text);
+});

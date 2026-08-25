@@ -11,54 +11,132 @@
  * become literal output rather than markup.
  */
 
+/** A run of text that is either markdown prose or literal code. */
+interface Segment {
+  code: boolean;
+  text: string;
+}
+
+/**
+ * An opening code fence: three or more backticks or tildes at the start of a
+ * line. CommonMark allows up to three spaces of indentation; more indentation
+ * is accepted here because a fence inside a list-table cell is indented to the
+ * item's content level, and a fence in an indented code block is literal code
+ * either way.
+ */
+const FENCE_OPEN = /^[ \t]*(`{3,}|~{3,})/;
+
+/** A fence of the same character, at least as long, and nothing else. */
+const FENCE_CLOSE = /^[ \t]*(`{3,}|~{3,})[ \t]*$/;
+
+/** The index of the newline ending the line at `from`, or the end of `text`. */
+function lineEnd(text: string, from: number): number {
+  const nl = text.indexOf("\n", from);
+  return nl === -1 ? text.length : nl;
+}
+
+function closesFence(line: string, marker: string): boolean {
+  const found = line.match(FENCE_CLOSE)?.[1];
+  return found !== undefined &&
+    found[0] === marker[0] &&
+    found.length >= marker.length;
+}
+
+/**
+ * Return the end of the fenced block opened by `marker` on the line at
+ * `start`, including the closing fence. An unclosed block runs to the end.
+ */
+function fenceEnd(text: string, start: number, marker: string): number {
+  let i = lineEnd(text, start);
+  while (i < text.length) {
+    i++; // step over the newline ending the previous line
+    const end = lineEnd(text, i);
+    if (closesFence(text.slice(i, end), marker)) return end;
+    i = end;
+  }
+  return text.length;
+}
+
+/**
+ * Split `text` into prose and code segments. Code segments are fenced blocks
+ * and inline code spans; concatenating every segment reproduces `text`.
+ */
+function splitCode(text: string): Segment[] {
+  const segments: Segment[] = [];
+  let start = 0;
+  let atLineStart = true;
+  let i = 0;
+
+  const emit = (end: number, code: boolean) => {
+    if (end > start) segments.push({ code, text: text.slice(start, end) });
+    start = end;
+  };
+
+  while (i < text.length) {
+    if (atLineStart) {
+      const marker = text.slice(i, lineEnd(text, i)).match(FENCE_OPEN)?.[1];
+      if (marker !== undefined) {
+        emit(i, false);
+        i = fenceEnd(text, i, marker);
+        emit(i, true);
+        continue;
+      }
+    }
+    const c = text[i];
+    if (c === "`") {
+      // An inline code span closes on a backtick run of the same length.
+      let run = 0;
+      while (text[i + run] === "`") run++;
+      const close = text.indexOf("`".repeat(run), i + run);
+      emit(i, false);
+      i = close === -1 ? i + run : close + run;
+      emit(i, true);
+      atLineStart = false;
+      continue;
+    }
+    if (c === "\\") {
+      // An escaped backtick cannot open a code span.
+      i += 2;
+      atLineStart = false;
+      continue;
+    }
+    atLineStart = c === "\n";
+    i++;
+  }
+  emit(text.length, false);
+  return segments;
+}
+
 /**
  * Escape square brackets that don't pair up into link or span syntax, e.g.
  * interval notation like `[timestamp, timestamp+interval)`. Paired brackets
  * are left alone, as is anything inside code.
  */
 export function escapeUnmatchedBrackets(text: string): string {
-  const chars = text.split("");
-  const opens: number[] = [];
-  const unmatched: number[] = [];
-  let inFence = false;
-  let atLineStart = true;
-  let i = 0;
-  while (i < chars.length) {
-    const c = chars[i];
-    if (atLineStart && text.startsWith("```", i)) {
-      inFence = !inFence;
-      while (i < chars.length && chars[i] !== "\n") i++;
-      continue;
+  const segments = splitCode(text);
+  const parts = segments.map((segment) => segment.text.split(""));
+  // Positions as [segment, offset]; brackets pair across intervening code.
+  const opens: [number, number][] = [];
+  const unmatched: [number, number][] = [];
+
+  segments.forEach((segment, seg) => {
+    if (segment.code) return;
+    const chars = parts[seg];
+    for (let i = 0; i < chars.length; i++) {
+      if (chars[i] === "\\") i++;
+      else if (chars[i] === "[") opens.push([seg, i]);
+      else if (chars[i] === "]") {
+        if (opens.length > 0) opens.pop();
+        else unmatched.push([seg, i]);
+      }
     }
-    atLineStart = c === "\n";
-    if (inFence) {
-      i++;
-      continue;
-    }
-    if (c === "`") {
-      // Skip an inline code span, matching the opening backtick run length.
-      let run = 0;
-      while (chars[i + run] === "`") run++;
-      const close = text.indexOf("`".repeat(run), i + run);
-      i = close === -1 ? i + run : close + run;
-      continue;
-    }
-    if (c === "\\") {
-      i += 2;
-      continue;
-    }
-    if (c === "[") opens.push(i);
-    else if (c === "]") {
-      if (opens.length > 0) opens.pop();
-      else unmatched.push(i);
-    }
-    i++;
-  }
+  });
   unmatched.push(...opens);
+
   // Splice from the back so earlier positions stay valid.
-  unmatched.sort((a, b) => b - a);
-  for (const pos of unmatched) chars.splice(pos, 0, "\\");
-  return chars.join("");
+  unmatched.sort(([segA, a], [segB, b]) => segB - segA || b - a);
+  for (const [seg, pos] of unmatched) parts[seg].splice(pos, 0, "\\");
+  return parts.map((part) => part.join("")).join("");
 }
 
 /**
@@ -69,50 +147,9 @@ function transformOutsideCode(
   text: string,
   fn: (prose: string) => string,
 ): string {
-  const out: string[] = [];
-  let segStart = 0;
-  let inFence = false;
-  let atLineStart = true;
-  let i = 0;
-  while (i < text.length) {
-    const c = text[i];
-    if (atLineStart && text.startsWith("```", i)) {
-      if (!inFence) {
-        out.push(fn(text.slice(segStart, i)));
-        segStart = i;
-      }
-      inFence = !inFence;
-      while (i < text.length && text[i] !== "\n") i++;
-      if (!inFence) {
-        out.push(text.slice(segStart, i));
-        segStart = i;
-      }
-      continue;
-    }
-    atLineStart = c === "\n";
-    if (inFence) {
-      i++;
-      continue;
-    }
-    if (c === "`") {
-      let run = 0;
-      while (text[i + run] === "`") run++;
-      const close = text.indexOf("`".repeat(run), i + run);
-      const end = close === -1 ? i + run : close + run;
-      out.push(fn(text.slice(segStart, i)));
-      out.push(text.slice(i, end));
-      segStart = end;
-      i = end;
-      continue;
-    }
-    if (c === "\\") {
-      i += 2;
-      continue;
-    }
-    i++;
-  }
-  out.push(inFence ? text.slice(segStart) : fn(text.slice(segStart)));
-  return out.join("");
+  return splitCode(text)
+    .map((segment) => (segment.code ? segment.text : fn(segment.text)))
+    .join("");
 }
 
 /**
@@ -140,10 +177,13 @@ export function markInlineHtmlExplicit(text: string): string {
  * reserves `{...}` for attribute syntax and rejects bare braces, but renders
  * them verbatim inside code — where a backslash would be literal and corrupt
  * the output as `GET /v1/users/\{guid\}/keys`.
+ *
+ * OpenAPI puts no character restrictions on parameter names, so any brace pair
+ * following a slash and holding a single path segment counts.
  */
 export function escapePathBracesOutsideCode(text: string): string {
   return transformOutsideCode(text, (s) =>
-    s.replace(/\/\{([A-Za-z_]+)\}/g, "/\\{$1\\}"),
+    s.replace(/\/\{([^{}\/\s]+)\}/g, "/\\{$1\\}"),
   );
 }
 
