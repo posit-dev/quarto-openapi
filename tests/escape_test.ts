@@ -158,3 +158,24 @@ test("escapeUnmatchedBrackets: an unclosed fence runs to the end of the text", (
   const text = "Before.\n\n```json\n[1, 2}\n";
   assertEquals(escapeUnmatchedBrackets(text), text);
 });
+
+test("escapePathBracesOutsideCode: a column-zero fence does not close an indented one", () => {
+  // The indented line is literal content of an indented code block; the fence
+  // at column zero starts a block of its own.
+  assertEquals(
+    escapePathBracesOutsideCode("    ```\n\nCall /v1/users/{id}.\n```"),
+    "    ```\n\nCall /v1/users/\\{id\\}.\n```",
+  );
+});
+
+test("escapePathBracesOutsideCode: a tab counts as four columns of indent", () => {
+  assertEquals(
+    escapePathBracesOutsideCode("\t```\n\nCall /v1/users/{id}."),
+    "\t```\n\nCall /v1/users/\\{id\\}.",
+  );
+});
+
+test("escapeUnmatchedBrackets: a closing fence may shift up to three spaces", () => {
+  const text = "  ```json\n[1, 2}\n   ```\n";
+  assertEquals(escapeUnmatchedBrackets(text), text);
+});

@@ -21,13 +21,22 @@ interface Segment {
  * An opening code fence: three or more backticks or tildes at the start of a
  * line, with any indentation. CommonMark allows up to three spaces, but a fence
  * inside a list-table cell is indented to the item's content level, so a
- * further-indented fence has to count too — see `fenceEnd` for the condition
+ * further-indented fence has to count too — see `splitCode` for the condition
  * that keeps that from misreading an indented code block.
  */
 const FENCE_OPEN = /^([ \t]*)(`{3,}|~{3,})/;
 
-/** A fence of the same character, at least as long, and nothing else. */
-const FENCE_CLOSE = /^[ \t]*(`{3,}|~{3,})[ \t]*$/;
+/** A line holding nothing but a fence. */
+const FENCE_CLOSE = /^([ \t]*)(`{3,}|~{3,})[ \t]*$/;
+
+/** Indentation in columns, expanding tabs to four-column stops as CommonMark does. */
+function indentWidth(indent: string): number {
+  let width = 0;
+  for (const c of indent) {
+    width = c === "\t" ? width + 4 - (width % 4) : width + 1;
+  }
+  return width;
+}
 
 /** The index of the newline ending the line at `from`, or the end of `text`. */
 function lineEnd(text: string, from: number): number {
@@ -35,23 +44,40 @@ function lineEnd(text: string, from: number): number {
   return nl === -1 ? text.length : nl;
 }
 
-function closesFence(line: string, marker: string): boolean {
-  const found = line.match(FENCE_CLOSE)?.[1];
-  return found !== undefined &&
-    found[0] === marker[0] &&
-    found.length >= marker.length;
+/**
+ * Whether `line` closes a fence opened with `marker` at `openIndent` columns.
+ * The fence must use the same character and be at least as long, and it may
+ * shift by up to the three columns CommonMark allows either fence to be
+ * indented by within its containing block.
+ */
+function closesFence(
+  line: string,
+  marker: string,
+  openIndent: number,
+): boolean {
+  const close = line.match(FENCE_CLOSE);
+  if (!close) return false;
+  const [, indent, found] = close;
+  return found[0] === marker[0] &&
+    found.length >= marker.length &&
+    Math.abs(indentWidth(indent) - openIndent) <= 3;
 }
 
 /**
  * Return the end of the fenced block opened by `marker` on the line at
  * `start`, including the closing fence, or -1 when nothing closes it.
  */
-function fenceEnd(text: string, start: number, marker: string): number {
+function fenceEnd(
+  text: string,
+  start: number,
+  marker: string,
+  openIndent: number,
+): number {
   let i = lineEnd(text, start);
   while (i < text.length) {
     i++; // step over the newline ending the previous line
     const end = lineEnd(text, i);
-    if (closesFence(text.slice(i, end), marker)) return end;
+    if (closesFence(text.slice(i, end), marker, openIndent)) return end;
     i = end;
   }
   return -1;
@@ -77,17 +103,23 @@ function splitCode(text: string): Segment[] {
       const open = text.slice(i, lineEnd(text, i)).match(FENCE_OPEN);
       if (open) {
         const [, indent, marker] = open;
-        const end = fenceEnd(text, i, marker);
+        const openIndent = indentWidth(indent);
+        const end = fenceEnd(text, i, marker, openIndent);
         // An unclosed fence runs to the end of the text, except past three
-        // spaces of indentation: there a lone fence is the literal content of
+        // columns of indentation: there a lone fence is the literal content of
         // an indented code block, and reading it as an opener would swallow
         // every rewrite in the prose that follows.
-        if (end !== -1 || indent.length <= 3) {
+        if (end !== -1 || openIndent <= 3) {
           emit(i, false);
           i = end === -1 ? text.length : end;
           emit(i, true);
           continue;
         }
+        // Literal content, not a fence: keep it in the prose segment and scan
+        // on, so the run cannot pair with a later one as an inline code span.
+        i += indent.length + marker.length;
+        atLineStart = false;
+        continue;
       }
     }
     const c = text[i];
