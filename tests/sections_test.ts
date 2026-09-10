@@ -405,3 +405,64 @@ test("renderApiReferenceBody: disambiguates a group heading against an endpoint 
     "expected the endpoint to keep its anchor",
   );
 });
+
+test("renderApiReferenceBody: disambiguates against an endpoint sub-anchor", () => {
+  const spec = minimalSpec({
+    "/v1/bootstrap": {
+      post: {
+        operationId: "bootstrap",
+        summary: "Boot",
+        tags: ["Bootstrap Responses"],
+        responses: { "200": { description: "OK" } },
+      },
+    },
+  });
+
+  const body = renderApiReferenceBody(spec, "operation-id").join("\n");
+
+  assert(
+    body.includes('## Bootstrap Responses {id="bootstrap-responses-1"}'),
+    `expected a disambiguated heading, got:\n${body.slice(0, 300)}`,
+  );
+});
+
+test("renderApiReferenceBody: disambiguates against a sanitized endpoint anchor", () => {
+  const spec = minimalSpec({
+    "/v1/keys": {
+      get: {
+        operationId: "api keys",
+        summary: "List keys",
+        tags: ["API Keys"],
+        responses: { "200": { description: "OK" } },
+      },
+    },
+  });
+
+  const body = renderApiReferenceBody(spec, "operation-id").join("\n");
+
+  assert(
+    body.includes('## API Keys {id="api-keys-1"}'),
+    `expected a disambiguated heading, got:\n${body.slice(0, 300)}`,
+  );
+});
+
+test("renderApiReferenceBody: ignores an anchor written inside a code span", () => {
+  const spec = minimalSpec({
+    "/v1/keys": {
+      get: {
+        operationId: "listKeys",
+        summary: "List keys",
+        tags: ["API Keys"],
+        responses: { "200": { description: "OK" } },
+      },
+    },
+  });
+  spec.info.description = "Write `{#api-keys}` as literal syntax.";
+
+  const body = renderApiReferenceBody(spec, "operation-id").join("\n");
+
+  assert(
+    body.includes("## API Keys\n"),
+    `expected a bare heading, got:\n${body.slice(0, 300)}`,
+  );
+});

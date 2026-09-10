@@ -16,6 +16,7 @@ import type {
 import { HTTP_METHODS, isReference } from "./types.ts";
 import { resolve } from "./refs.ts";
 import { renderSchema } from "./schema.ts";
+import { stripCode } from "./escape.ts";
 import {
   autoIdentifier,
   disambiguateId,
@@ -142,52 +143,65 @@ export function renderApiReferenceBody(
   if (anchorStyle === "path") {
     rewriteSpecRefs(spec, buildOperationIdToPathMap(spec));
   }
-  const takenIds = declaredAnchors(spec, anchorStyle);
-  const lines: string[] = [];
-  for (const section of groupByResource(spec)) {
-    lines.push(...renderSection(spec, section, { anchorStyle, takenIds }));
-  }
-  return lines;
-}
+  // Endpoints first: their anchors do not depend on the section headings, and
+  // a heading's derived anchor has to avoid every one of them.
+  const sections = groupByResource(spec);
+  const bodies = sections.map((section) =>
+    section.endpoints.flatMap((endpoint) => [
+      ...renderEndpoint(spec, endpoint, { anchorStyle }),
+      "",
+    ])
+  );
 
-/** The anchor an endpoint heading declares. */
-function endpointAnchor(
-  endpoint: Endpoint,
-  anchorStyle: RenderOptions["anchorStyle"],
-): string {
-  const { method, path, operation } = endpoint;
-  return anchorStyle === "path"
-    ? pathToAnchor(method, path)
-    : operation.operationId || pathToAnchor(method, path);
+  const takenIds = declaredAnchors(spec);
+  for (const anchor of anchorsIn(bodies.flat())) takenIds.add(anchor);
+
+  const lines: string[] = [];
+  sections.forEach((section, i) => {
+    lines.push(
+      heading(2, section.name, claimSectionAnchor(section.name, {
+        anchorStyle,
+        takenIds,
+      })),
+    );
+    lines.push("");
+    lines.push(...bodies[i]);
+  });
+  return lines;
 }
 
 /** An anchor written as `{#id}`, or as `id="…"` inside an attribute block. */
 const DECLARED_ANCHOR = /\{#([^\s{}]+)\}|\{[^{}]*\bid="([^"]+)"[^{}]*\}/g;
 
+/** Every anchor declared in `lines`. */
+function anchorsIn(lines: Iterable<string>): Set<string> {
+  const anchors = new Set<string>();
+  for (const line of lines) {
+    for (const [, hash, attr] of line.matchAll(DECLARED_ANCHOR)) {
+      anchors.add(hash ?? attr);
+    }
+  }
+  return anchors;
+}
+
 /**
- * Every anchor the page declares outright: the ones the spec's prose writes,
- * and the ones this generator gives each endpoint.
+ * The anchors the spec's own prose declares, ignoring any written inside code,
+ * which is an example of the syntax rather than a use of it.
  *
  * Quarto renames a derived anchor that collides with another derived anchor.
  * It does not compare a derived anchor with a declared one: Quarto 1 warns and
  * emits the duplicate, Quarto 2 emits it silently. So a section heading, whose
- * anchor Quarto derives from its text, has to avoid this set itself.
+ * anchor Quarto derives from its text, has to avoid these itself.
  */
-function declaredAnchors(
-  spec: OpenAPISpec,
-  anchorStyle: RenderOptions["anchorStyle"],
-): Set<string> {
-  const anchors = new Set<string>();
-
+function declaredAnchors(spec: OpenAPISpec): Set<string> {
+  const prose: string[] = [];
   const walk = (node: unknown): void => {
     if (Array.isArray(node)) {
       for (const item of node) walk(item);
     } else if (node !== null && typeof node === "object") {
       for (const [key, value] of Object.entries(node)) {
         if (key === "description" && typeof value === "string") {
-          for (const [, hash, attr] of value.matchAll(DECLARED_ANCHOR)) {
-            anchors.add(hash ?? attr);
-          }
+          prose.push(stripCode(value));
         } else {
           walk(value);
         }
@@ -195,13 +209,7 @@ function declaredAnchors(
     }
   };
   walk(spec);
-
-  for (const section of groupByResource(spec)) {
-    for (const endpoint of section.endpoints) {
-      anchors.add(endpointAnchor(endpoint, anchorStyle));
-    }
-  }
-  return anchors;
+  return anchorsIn(prose);
 }
 
 /**
@@ -414,7 +422,9 @@ function shiftHeadings(description: string): string {
 function renderEndpoint(spec: OpenAPISpec, endpoint: Endpoint, options: RenderOptions = DEFAULT_OPTIONS): string[] {
   const { method, path, operation } = endpoint;
   const title = operation.summary || `${methodBadge(method)} ${path}`;
-  const anchor = endpointAnchor(endpoint, options.anchorStyle);
+  const anchor = options.anchorStyle === "path"
+    ? pathToAnchor(method, path)
+    : operation.operationId || pathToAnchor(method, path);
 
   const lines: string[] = [];
 
