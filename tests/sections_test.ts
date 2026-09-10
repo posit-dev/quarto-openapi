@@ -1,4 +1,5 @@
-import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { test } from "node:test";
+import { assertEquals } from "./assert.ts";
 import { groupByResource, buildOperationIdToPathMap, rewriteOperationIdRefs } from "../_extensions/quarto-openapi/lib/sections.ts";
 import type { OpenAPISpec } from "../_extensions/quarto-openapi/lib/types.ts";
 
@@ -10,7 +11,7 @@ function minimalSpec(paths: OpenAPISpec["paths"]): OpenAPISpec {
   };
 }
 
-Deno.test("operations with tags group by first tag", () => {
+test("operations with tags group by first tag", () => {
   const spec = minimalSpec({
     "/v1/content": {
       get: {
@@ -47,7 +48,7 @@ Deno.test("operations with tags group by first tag", () => {
   assertEquals(sections[1].endpoints.length, 1);
 });
 
-Deno.test("section ordering matches first-seen tag order in paths", () => {
+test("section ordering matches first-seen tag order in paths", () => {
   const spec = minimalSpec({
     "/v1/users": {
       get: {
@@ -82,7 +83,7 @@ Deno.test("section ordering matches first-seen tag order in paths", () => {
   assertEquals(names, ["Users", "Content"]);
 });
 
-Deno.test("operations without tags fall back to path-prefix grouping", () => {
+test("operations without tags fall back to path-prefix grouping", () => {
   const spec = minimalSpec({
     "/v1/content": {
       get: {
@@ -116,7 +117,7 @@ Deno.test("operations without tags fall back to path-prefix grouping", () => {
   assertEquals(sections[1].endpoints.length, 1);
 });
 
-Deno.test("mixed spec: tagged and untagged operations coexist", () => {
+test("mixed spec: tagged and untagged operations coexist", () => {
   const spec = minimalSpec({
     "/v1/content": {
       get: {
@@ -142,7 +143,7 @@ Deno.test("mixed spec: tagged and untagged operations coexist", () => {
   assertEquals(sections[1].name, "Internal");
 });
 
-Deno.test("top-level tags array controls section order", () => {
+test("top-level tags array controls section order", () => {
   const spec: OpenAPISpec = {
     openapi: "3.0.3",
     info: { title: "Test", version: "1.0.0" },
@@ -174,7 +175,7 @@ Deno.test("top-level tags array controls section order", () => {
   assertEquals(names, ["Zebras", "Aardvarks"]);
 });
 
-Deno.test("unused tags in spec.tags do not produce empty sections", () => {
+test("unused tags in spec.tags do not produce empty sections", () => {
   const spec: OpenAPISpec = {
     openapi: "3.0.3",
     info: { title: "Test", version: "1.0.0" },
@@ -206,7 +207,7 @@ Deno.test("unused tags in spec.tags do not produce empty sections", () => {
   assertEquals(names, ["Users", "Content"]);
 });
 
-Deno.test("operations with tags not in spec.tags appear at the end", () => {
+test("operations with tags not in spec.tags appear at the end", () => {
   const spec: OpenAPISpec = {
     openapi: "3.0.3",
     info: { title: "Test", version: "1.0.0" },
@@ -238,7 +239,7 @@ Deno.test("operations with tags not in spec.tags appear at the end", () => {
   assertEquals(names, ["Content", "Users"]);
 });
 
-Deno.test("tictactoe spec groups by tag Gameplay, not path board", () => {
+test("tictactoe spec groups by tag Gameplay, not path board", () => {
   const spec = minimalSpec({
     "/board": {
       get: {
@@ -271,7 +272,7 @@ Deno.test("tictactoe spec groups by tag Gameplay, not path board", () => {
   assertEquals(sections[0].endpoints.length, 3);
 });
 
-Deno.test("buildOperationIdToPathMap maps operationIds to path-style anchors", () => {
+test("buildOperationIdToPathMap maps operationIds to path-style anchors", () => {
   const spec = minimalSpec({
     "/v1/content": {
       get: {
@@ -310,7 +311,7 @@ Deno.test("buildOperationIdToPathMap maps operationIds to path-style anchors", (
   assertEquals(map.has("nonExistent"), false);
 });
 
-Deno.test("rewriteOperationIdRefs rewrites operationId fragments to path-style", () => {
+test("rewriteOperationIdRefs rewrites operationId fragments to path-style", () => {
   const idToPath = new Map([
     ["getTask", "get-/v1/tasks/-id-"],
     ["createGroup", "post-/v1/groups"],
@@ -323,7 +324,7 @@ Deno.test("rewriteOperationIdRefs rewrites operationId fragments to path-style",
   assertEquals(rewriteOperationIdRefs(input, idToPath), expected);
 });
 
-Deno.test("rewriteOperationIdRefs does not rewrite unknown IDs", () => {
+test("rewriteOperationIdRefs does not rewrite unknown IDs", () => {
   const idToPath = new Map([
     ["getTask", "get-/v1/tasks/-id-"],
   ]);
@@ -332,7 +333,7 @@ Deno.test("rewriteOperationIdRefs does not rewrite unknown IDs", () => {
   assertEquals(rewriteOperationIdRefs(input, idToPath), input);
 });
 
-Deno.test("rewriteOperationIdRefs handles multiple occurrences", () => {
+test("rewriteOperationIdRefs handles multiple occurrences", () => {
   const idToPath = new Map([
     ["getTask", "get-/v1/tasks/-id-"],
   ]);

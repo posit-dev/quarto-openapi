@@ -1,8 +1,9 @@
+import { test } from "node:test";
 import {
   assert,
   assertEquals,
   assertStringIncludes,
-} from "https://deno.land/std@0.224.0/assert/mod.ts";
+} from "./assert.ts";
 import { renderSchema } from "../_extensions/quarto-openapi/lib/schema.ts";
 import type { OpenAPISpec, Schema } from "../_extensions/quarto-openapi/lib/types.ts";
 
@@ -21,7 +22,7 @@ function rendered(spec: OpenAPISpec, schema: Schema): string {
   return renderSchema(spec, schema).join("\n");
 }
 
-Deno.test("renderSchema: simple object produces a grid table with properties", () => {
+test("renderSchema: simple object produces a grid table with properties", () => {
   const spec = specWithSchemas();
   const schema: Schema = {
     type: "object",
@@ -43,7 +44,7 @@ Deno.test("renderSchema: simple object produces a grid table with properties", (
   assertStringIncludes(output, "+===");
 });
 
-Deno.test("renderSchema: nested object flattens with dotted names", () => {
+test("renderSchema: nested object flattens with dotted names", () => {
   const spec = specWithSchemas();
   const schema: Schema = {
     type: "object",
@@ -64,7 +65,7 @@ Deno.test("renderSchema: nested object flattens with dotted names", () => {
   assertStringIncludes(output, "`owner.name`");
 });
 
-Deno.test("renderSchema: array of objects expands item properties", () => {
+test("renderSchema: array of objects expands item properties", () => {
   const spec = specWithSchemas();
   const schema: Schema = {
     type: "array",
@@ -82,7 +83,7 @@ Deno.test("renderSchema: array of objects expands item properties", () => {
   assertStringIncludes(output, "`id`");
 });
 
-Deno.test("renderSchema: allOf merges properties from multiple schemas", () => {
+test("renderSchema: allOf merges properties from multiple schemas", () => {
   const spec = specWithSchemas({
     Base: {
       type: "object",
@@ -110,7 +111,7 @@ Deno.test("renderSchema: allOf merges properties from multiple schemas", () => {
   assertStringIncludes(output, "`name`");
 });
 
-Deno.test("renderSchema: property attributes rendered in description", () => {
+test("renderSchema: property attributes rendered in description", () => {
   const spec = specWithSchemas();
   const schema: Schema = {
     type: "object",
@@ -145,7 +146,7 @@ Deno.test("renderSchema: property attributes rendered in description", () => {
   assertStringIncludes(output, "`inactive`");
 });
 
-Deno.test("renderSchema: $ref in properties resolves correctly", () => {
+test("renderSchema: $ref in properties resolves correctly", () => {
   const spec = specWithSchemas({
     Tag: {
       type: "object",
@@ -168,7 +169,7 @@ Deno.test("renderSchema: $ref in properties resolves correctly", () => {
   assertStringIncludes(output, "`tag.label`");
 });
 
-Deno.test("renderSchema: nested field uses CSS class instead of leading spaces", () => {
+test("renderSchema: nested field uses CSS class instead of leading spaces", () => {
   const spec = specWithSchemas();
   const schema: Schema = {
     type: "object",
@@ -191,7 +192,7 @@ Deno.test("renderSchema: nested field uses CSS class instead of leading spaces",
   assert(!output.includes("  `owner.name`"), "should not use space indentation");
 });
 
-Deno.test("renderSchema: top-level fields have no span wrapper", () => {
+test("renderSchema: top-level fields have no span wrapper", () => {
   const spec = specWithSchemas();
   const schema: Schema = {
     type: "object",
@@ -207,7 +208,7 @@ Deno.test("renderSchema: top-level fields have no span wrapper", () => {
   assert(!output.includes("{.schema-nest"), "top-level fields should not have nesting class");
 });
 
-Deno.test("renderSchema: deeper nesting increments class number", () => {
+test("renderSchema: deeper nesting increments class number", () => {
   const spec = specWithSchemas();
   const schema: Schema = {
     type: "object",
@@ -232,7 +233,7 @@ Deno.test("renderSchema: deeper nesting increments class number", () => {
   assertStringIncludes(output, "[`a.b.c`]{.schema-nest-2}");
 });
 
-Deno.test("renderSchema: nullable type shows type|null", () => {
+test("renderSchema: nullable type shows type|null", () => {
   const spec = specWithSchemas();
   const schema: Schema = {
     type: "object",
@@ -246,7 +247,7 @@ Deno.test("renderSchema: nullable type shows type|null", () => {
   assertStringIncludes(output, "string|null");
 });
 
-Deno.test("renderSchema: numeric formats like int32 and double are suppressed", () => {
+test("renderSchema: numeric formats like int32 and double are suppressed", () => {
   const spec = specWithSchemas();
   const schema: Schema = {
     type: "object",
@@ -268,7 +269,7 @@ Deno.test("renderSchema: numeric formats like int32 and double are suppressed", 
   assert(!output.includes("float"), "float should be suppressed");
 });
 
-Deno.test("renderSchema: semantic formats like date-time and uuid are shown", () => {
+test("renderSchema: semantic formats like date-time and uuid are shown", () => {
   const spec = specWithSchemas();
   const schema: Schema = {
     type: "object",
@@ -288,7 +289,7 @@ Deno.test("renderSchema: semantic formats like date-time and uuid are shown", ()
   assertStringIncludes(output, "string (email)");
 });
 
-Deno.test("renderSchema: nullable with suppressed format renders type|null without parens", () => {
+test("renderSchema: nullable with suppressed format renders type|null without parens", () => {
   const spec = specWithSchemas();
   const schema: Schema = {
     type: "object",
@@ -303,7 +304,7 @@ Deno.test("renderSchema: nullable with suppressed format renders type|null witho
   assert(!output.includes("int64"), "int64 should be suppressed even when nullable");
 });
 
-Deno.test("flattenProperties: $ref-valued map renders map row and recurses into value", () => {
+test("flattenProperties: $ref-valued map renders map row and recurses into value", () => {
   const spec = specWithSchemas({
     WindowCounts: {
       type: "object",
@@ -331,7 +332,7 @@ Deno.test("flattenProperties: $ref-valued map renders map row and recurses into 
   assertStringIncludes(output, "Total");
 });
 
-Deno.test("flattenProperties: primitive-valued map renders typed map row", () => {
+test("flattenProperties: primitive-valued map renders typed map row", () => {
   const spec = specWithSchemas();
   const schema: Schema = {
     type: "object",
@@ -346,7 +347,7 @@ Deno.test("flattenProperties: primitive-valued map renders typed map row", () =>
   assertStringIncludes(output, "map[string, boolean]");
 });
 
-Deno.test("flattenProperties: any-valued map renders map[string, any]", () => {
+test("flattenProperties: any-valued map renders map[string, any]", () => {
   const spec = specWithSchemas();
   const schema: Schema = {
     type: "object",
@@ -361,7 +362,7 @@ Deno.test("flattenProperties: any-valued map renders map[string, any]", () => {
   assertStringIncludes(output, "map[string, any]");
 });
 
-Deno.test("renderSchema: top-level $ref map renders 'Map of' and the value table", () => {
+test("renderSchema: top-level $ref map renders 'Map of' and the value table", () => {
   const spec = specWithSchemas({
     WindowCounts: {
       type: "object",
@@ -380,7 +381,7 @@ Deno.test("renderSchema: top-level $ref map renders 'Map of' and the value table
   assertStringIncludes(output, "Total");
 });
 
-Deno.test("renderSchema: top-level primitive map renders 'Map of string to <type>'", () => {
+test("renderSchema: top-level primitive map renders 'Map of string to <type>'", () => {
   const spec = specWithSchemas();
   const schema: Schema = {
     type: "object",
@@ -392,7 +393,7 @@ Deno.test("renderSchema: top-level primitive map renders 'Map of string to <type
   assertStringIncludes(output, "Map of string to string");
 });
 
-Deno.test("renderSchema: top-level any map renders 'Map of string to any'", () => {
+test("renderSchema: top-level any map renders 'Map of string to any'", () => {
   const spec = specWithSchemas();
   const schema: Schema = {
     type: "object",

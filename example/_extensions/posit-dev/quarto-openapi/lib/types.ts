@@ -60,6 +60,9 @@ export interface Operation {
   responses: Record<string, Response | Reference>;
   security?: SecurityRequirement[];
   deprecated?: boolean;
+  // OpenAPI vendor extension. The renderer relies only on truthiness; do not
+  // compare with === true.
+  "x-experimental"?: boolean;
 }
 
 export interface Parameter {

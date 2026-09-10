@@ -1,4 +1,5 @@
-import { assertEquals, assertStringIncludes } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { test } from "node:test";
+import { assertEquals, assertStringIncludes } from "./assert.ts";
 import { resolve } from "../_extensions/quarto-openapi/lib/refs.ts";
 import type { OpenAPISpec, Schema } from "../_extensions/quarto-openapi/lib/types.ts";
 
@@ -13,7 +14,7 @@ function specWithSchemas(
   };
 }
 
-Deno.test("resolve expands a $ref to the referenced schema", () => {
+test("resolve expands a $ref to the referenced schema", () => {
   const spec = specWithSchemas({
     Pet: {
       type: "object",
@@ -30,7 +31,7 @@ Deno.test("resolve expands a $ref to the referenced schema", () => {
   assertEquals(name.type, "string");
 });
 
-Deno.test("resolve expands nested $refs recursively", () => {
+test("resolve expands nested $refs recursively", () => {
   const spec = specWithSchemas({
     Pet: {
       type: "object",
@@ -54,7 +55,7 @@ Deno.test("resolve expands nested $refs recursively", () => {
   assertEquals(ownerName.type, "string");
 });
 
-Deno.test("resolve handles circular refs without infinite loop", () => {
+test("resolve handles circular refs without infinite loop", () => {
   const spec = specWithSchemas({
     Node: {
       type: "object",
@@ -72,7 +73,7 @@ Deno.test("resolve handles circular refs without infinite loop", () => {
   assertStringIncludes(child.description || "", "circular");
 });
 
-Deno.test("resolve passes through non-ref objects unchanged", () => {
+test("resolve passes through non-ref objects unchanged", () => {
   const spec = specWithSchemas({});
   const schema: Schema = { type: "string", description: "a name" };
 

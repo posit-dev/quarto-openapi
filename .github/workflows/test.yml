@@ -11,5 +11,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: denoland/setup-deno@v2
-      - run: deno test tests/
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: npm ci
+      # The pre-render script imports `yaml`; typecheck needs it resolvable.
+      - run: npm ci --prefix _extensions/quarto-openapi
+      - run: npm run typecheck
+      - run: npm test
+      - name: Check the example copy of the extension is in sync
+        run: npm run sync-example -- --check

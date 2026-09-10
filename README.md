@@ -4,11 +4,24 @@ A Quarto extension that generates API reference documentation from an OpenAPI 3.
 
 The extension runs as a pre-render script: it reads your OpenAPI spec and generates a single `.qmd` page with the full API reference. The page includes sections grouped by resource, endpoint details, parameter tables, request/response schemas, and anchor IDs.
 
+## Requirements
+
+The pre-render script runs on Node.js 22.6 or later, which Quarto must be able
+to find on `PATH` (or via `QUARTO_NODE`), and npm to install its one
+dependency. Quarto 2 runs `.ts` render scripts with Node directly; Quarto 1
+runs them with its own bundled runtime, which supports the same imports.
+
 ## Installation
 
 ```bash
 quarto add posit-dev/quarto-openapi
+npm ci --prefix _extensions/posit-dev/quarto-openapi
 ```
+
+The second command installs the `yaml` package the pre-render script imports.
+Node resolves bare imports from the `node_modules` nearest the script, so it
+goes beside the script rather than in your project root. Repeat it after
+`quarto update`.
 
 ## Configuration
 
@@ -119,17 +132,45 @@ quarto-openapi/
   _extensions/
     quarto-openapi/
       _extension.yml            # metadata extension manifest
-      openapi-to-markdown.ts    # pre-render entry point (Deno/TypeScript)
+      openapi-to-markdown.ts    # pre-render entry point (Node/TypeScript)
+      package.json              # the script's `yaml` dependency
+      package-lock.json         # pinned; `npm ci` installs from it
       lib/
         types.ts                # OpenAPI 3.0.x type definitions
         refs.ts                 # $ref resolution
         sections.ts             # path grouping and endpoint rendering
         schema.ts               # schema-to-table conversion
         markdown.ts             # grid table and markdown utilities
+  tests/                        # node:test suites for lib/
+  scripts/
+    sync-example.ts             # copies the extension into example/
   example/                      # working example (Tic Tac Toe API)
     _quarto.yml
     openapi.json
 ```
+
+## Development
+
+```bash
+npm install          # dev dependencies: TypeScript and its Node types
+npm run setup        # extension dependencies, and the example's copy of them
+npm test             # node --test over tests/
+npm run typecheck    # tsc --noEmit; Node strips types but never checks them
+npm run sync-example # refresh example/_extensions from _extensions
+```
+
+`npm run setup` is needed once before `npm run typecheck` or rendering the
+example, since both need `yaml` resolvable.
+
+`example/_extensions/posit-dev/quarto-openapi` is a copy of the extension
+source at the path `quarto add` installs to, so the example runs the same code
+a user gets. Run `npm run sync-example` after changing the extension; CI fails
+if the copy is stale. Dependencies are excluded from the copy — the example
+installs its own.
+
+Only TypeScript syntax that Node can erase is allowed, since Node strips types
+rather than compiling them — no `enum`, `namespace`, or parameter properties.
+`tsconfig.json` sets `erasableSyntaxOnly` to catch this at typecheck time.
 
 ## Limitations
 

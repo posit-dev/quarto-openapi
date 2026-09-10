@@ -1,4 +1,4 @@
-#!/usr/bin/env -S quarto run
+#!/usr/bin/env node
 
 /**
  * Pre-render script for the quarto-openapi extension.
@@ -6,16 +6,20 @@
  * Reads an OpenAPI 3.x spec and generates a single .qmd file
  * with the full API reference.
  *
+ * Runs under node (>= 22.6, for TypeScript type stripping). The `yaml`
+ * dependency is installed in this extension's directory; see package.json.
+ *
  * Configuration is read from _quarto.yml under the "openapi" key:
  *   openapi:
  *     spec: "api/openapi.json"
  *     output: "api/index.qmd"
  */
 
-import { parse as parseYaml, stringify as stringifyYaml } from "stdlib/yaml";
-import { join, dirname, extname } from "stdlib/path";
+import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
+import { join, dirname, extname } from "node:path";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import type { OpenAPISpec } from "./lib/types.ts";
-import { groupByResource, renderSection, buildOperationIdToPathMap, rewriteOperationIdRefs, type RenderOptions } from "./lib/sections.ts";
+import { groupByResource, renderApiReferenceBody } from "./lib/sections.ts";
 
 type AnchorStyle = "operation-id" | "path";
 
@@ -30,23 +34,26 @@ interface QuartoProject {
 }
 
 async function main() {
-  const projectDir = Deno.env.get("QUARTO_PROJECT_DIR");
+  const projectDir = process.env.QUARTO_PROJECT_DIR;
   if (!projectDir) {
     console.error(
       "QUARTO_PROJECT_DIR not set. This script must run as a Quarto pre-render script.",
     );
-    Deno.exit(1);
+    process.exit(1);
   }
 
   // Read _quarto.yml
   const quartoYmlPath = join(projectDir, "_quarto.yml");
   let quartoYml: QuartoProject;
   try {
-    const content = await Deno.readTextFile(quartoYmlPath);
-    quartoYml = parseYaml(content) as QuartoProject;
+    const content = await readFile(quartoYmlPath, "utf8");
+    // Quarto 2 config files may tag strings with `!path`; resolve the tag to
+    // the plain string instead of warning about it once per occurrence.
+    const pathTag = { tag: "!path", resolve: (str: string) => str };
+    quartoYml = parseYaml(content, { customTags: [pathTag] }) as QuartoProject;
   } catch (e) {
     console.error(`Failed to read ${quartoYmlPath}: ${e}`);
-    Deno.exit(1);
+    process.exit(1);
   }
 
   const config = quartoYml.openapi;
@@ -57,26 +64,25 @@ async function main() {
 
   if (!config.spec) {
     console.error("openapi.spec is required in _quarto.yml");
-    Deno.exit(1);
+    process.exit(1);
   }
   if (!config.output) {
     console.error("openapi.output is required in _quarto.yml");
-    Deno.exit(1);
+    process.exit(1);
   }
 
   const validAnchorStyles: AnchorStyle[] = ["operation-id", "path"];
   if (config["anchor-style"] && !validAnchorStyles.includes(config["anchor-style"])) {
     console.error(`openapi.anchor-style must be one of: ${validAnchorStyles.join(", ")}`);
-    Deno.exit(1);
+    process.exit(1);
   }
   const anchorStyle: AnchorStyle = config["anchor-style"] ?? "operation-id";
-  const renderOptions: RenderOptions = { anchorStyle };
 
   // Load the OpenAPI spec
   const specPath = join(projectDir, config.spec);
   let spec: OpenAPISpec;
   try {
-    const content = await Deno.readTextFile(specPath);
+    const content = await readFile(specPath, "utf8");
     const ext = extname(specPath).toLowerCase();
     if (ext === ".json") {
       spec = JSON.parse(content);
@@ -85,7 +91,7 @@ async function main() {
     }
   } catch (e) {
     console.error(`Failed to read spec at ${specPath}: ${e}`);
-    Deno.exit(1);
+    process.exit(1);
   }
 
   // Validate it looks like OpenAPI 3.x
@@ -93,7 +99,7 @@ async function main() {
     console.error(
       `Expected OpenAPI 3.x spec, got version: ${spec.openapi || "unknown"}`,
     );
-    Deno.exit(1);
+    process.exit(1);
   }
 
   console.log(`Loaded OpenAPI ${spec.openapi} spec: ${spec.info.title}`);
@@ -102,7 +108,10 @@ async function main() {
     `Schemas: ${Object.keys(spec.components?.schemas || {}).length}`,
   );
 
-  // Group endpoints by resource
+  // Render the body first: it rewrites the spec's descriptions in place,
+  // including spec.info.description used below.
+  const body = renderApiReferenceBody(spec, anchorStyle);
+
   const sections = groupByResource(spec);
   console.log(
     `Sections: ${sections.map((s) => `${s.name} (${s.endpoints.length})`).join(", ")}`,
@@ -132,22 +141,14 @@ async function main() {
   }
 
   // Sections
-  for (const section of sections) {
-    lines.push(...renderSection(spec, section, renderOptions));
-  }
+  lines.push(...body);
 
-  // When using path-style anchors, rewrite any operationId cross-references
-  // (e.g. (#getTask)) in descriptions and schema docs to path-style anchors.
-  let output = lines.join("\n") + "\n";
-  if (anchorStyle === "path") {
-    const idToPath = buildOperationIdToPathMap(spec);
-    output = rewriteOperationIdRefs(output, idToPath);
-  }
+  const output = lines.join("\n") + "\n";
 
   // Write output
   const outputPath = join(projectDir, config.output);
-  await Deno.mkdir(dirname(outputPath), { recursive: true });
-  await Deno.writeTextFile(outputPath, output);
+  await mkdir(dirname(outputPath), { recursive: true });
+  await writeFile(outputPath, output);
 
   const totalEndpoints = sections.reduce(
     (sum, s) => sum + s.endpoints.length,

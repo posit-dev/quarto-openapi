@@ -1,0 +1,17 @@
+{
+  "name": "quarto-openapi",
+  "private": true,
+  "type": "module",
+  "description": "Development tooling for the quarto-openapi extension. The extension's own runtime dependency lives in _extensions/quarto-openapi/package.json.",
+  "scripts": {
+    "setup": "npm ci --prefix _extensions/quarto-openapi && npm run sync-example && npm ci --prefix example/_extensions/posit-dev/quarto-openapi",
+    "test": "node --test 'tests/*_test.ts'",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm test",
+    "sync-example": "node scripts/sync-example.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}

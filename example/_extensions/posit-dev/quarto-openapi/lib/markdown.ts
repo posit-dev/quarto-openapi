@@ -7,11 +7,19 @@ export interface TableRow {
   cells: string[];
 }
 
+/** Fenced div markers wrapping every gridTable() block. */
+export const TABLE_DIV_OPEN = "::: {.quarto-openapi-table}";
+export const TABLE_DIV_CLOSE = ":::";
+
 /**
  * Generate a Pandoc grid table.
  *
  * Grid tables support multi-line cells and are the most flexible
  * table format in Pandoc/Quarto.
+ *
+ * Grid tables are fixed-width: cells must be in their final form, because
+ * changing a cell's length afterward breaks the alignment Pandoc needs to
+ * read the table.
  */
 export function gridTable(headers: string[], rows: TableRow[]): string[] {
   if (rows.length === 0) return [];
@@ -55,7 +63,7 @@ export function gridTable(headers: string[], rows: TableRow[]): string[] {
     }
   };
 
-  lines.push("::: {.quarto-openapi-table}");
+  lines.push(TABLE_DIV_OPEN);
   lines.push(separator("-"));
   emitRow(headerLines);
   lines.push(separator("="));
@@ -65,7 +73,7 @@ export function gridTable(headers: string[], rows: TableRow[]): string[] {
     lines.push(separator("-"));
   }
 
-  lines.push(":::");
+  lines.push(TABLE_DIV_CLOSE);
 
   return lines;
 }
