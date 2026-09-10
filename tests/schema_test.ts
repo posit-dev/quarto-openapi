@@ -22,7 +22,7 @@ function rendered(spec: OpenAPISpec, schema: Schema): string {
   return renderSchema(spec, schema).join("\n");
 }
 
-test("renderSchema: simple object produces a grid table with properties", () => {
+test("renderSchema: simple object produces a table with properties", () => {
   const spec = specWithSchemas();
   const schema: Schema = {
     type: "object",
@@ -40,8 +40,8 @@ test("renderSchema: simple object produces a grid table with properties", () => 
   assertStringIncludes(output, "`age`");
   assertStringIncludes(output, "`integer`");
   assertStringIncludes(output, "Age in years");
-  // Grid table markers
-  assertStringIncludes(output, "+===");
+  // List table markers
+  assertStringIncludes(output, '::: {.list-table header-rows="1"');
 });
 
 test("renderSchema: nested object flattens with dotted names", () => {
@@ -204,7 +204,7 @@ test("renderSchema: top-level fields have no span wrapper", () => {
   const output = rendered(spec, schema);
 
   // Top-level field should be plain backtick-quoted, not wrapped in a span
-  assertStringIncludes(output, "| `name`");
+  assertStringIncludes(output, "* * `name`");
   assert(!output.includes("{.schema-nest"), "top-level fields should not have nesting class");
 });
 
@@ -403,4 +403,29 @@ test("renderSchema: top-level any map renders 'Map of string to any'", () => {
   const output = rendered(spec, schema);
 
   assertStringIncludes(output, "Map of string to any");
+});
+
+test("renderSchema: an empty-string default renders as a visible empty string", () => {
+  const spec = specWithSchemas();
+  const schema: Schema = {
+    type: "object",
+    properties: { prefix: { type: "string", default: "" } },
+  };
+
+  const output = rendered(spec, schema);
+
+  // An empty code span would render as nothing at all
+  assertStringIncludes(output, 'Default: `""`');
+});
+
+test("renderSchema: enum values go through the same formatter as defaults", () => {
+  const spec = specWithSchemas();
+  const schema: Schema = {
+    type: "object",
+    properties: { mode: { type: "string", enum: ["", "fast", null] } },
+  };
+
+  const output = rendered(spec, schema);
+
+  assertStringIncludes(output, 'Enum: `""`, `fast`, `null`');
 });

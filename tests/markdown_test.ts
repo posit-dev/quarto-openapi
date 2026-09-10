@@ -4,7 +4,9 @@ import {
   assertStringIncludes,
 } from "./assert.ts";
 import {
-  gridTable,
+  autoIdentifier,
+  disambiguateId,
+  listTable,
   heading,
   pathToAnchor,
   sanitizeId,
@@ -13,37 +15,39 @@ import {
   type TableRow,
 } from "../_extensions/quarto-openapi/lib/markdown.ts";
 
-test("gridTable: produces valid Pandoc grid table syntax", () => {
-  const result = gridTable(
+test("listTable: produces a Quarto list table with a header row", () => {
+  const result = listTable(
     ["Name", "Type"],
     [{ cells: ["id", "string"] }, { cells: ["age", "integer"] }],
   );
   const output = result.join("\n");
 
-  // Header separator uses =
-  assertStringIncludes(output, "+==");
-  // Row separators use -
-  assertStringIncludes(output, "+--");
-  // Content present
-  assertStringIncludes(output, "id");
-  assertStringIncludes(output, "string");
-  assertStringIncludes(output, "age");
-  assertStringIncludes(output, "integer");
+  assertStringIncludes(output, TABLE_DIV_OPEN);
+  assertStringIncludes(output, '::: {.list-table header-rows="1"');
+  // First cell of a row opens the item, the rest are nested under it
+  assertStringIncludes(output, "* * Name");
+  assertStringIncludes(output, "  * Type");
+  assertStringIncludes(output, "* * id");
+  assertStringIncludes(output, "  * string");
+  assertStringIncludes(output, "* * age");
+  assertStringIncludes(output, "  * integer");
+  assertEquals(result.at(-1), TABLE_DIV_CLOSE);
 });
 
-test("gridTable: multi-line cell content spans multiple rows", () => {
-  const result = gridTable(
+test("listTable: multi-line cell content indents to the item content level", () => {
+  const result = listTable(
     ["Name", "Description"],
     [{ cells: ["id", "The unique\nidentifier"] }],
   );
   const output = result.join("\n");
 
-  assertStringIncludes(output, "The unique");
-  assertStringIncludes(output, "identifier");
+  assertStringIncludes(output, "  * The unique");
+  // Continuation lines sit under the item marker, not at column 0
+  assertStringIncludes(output, "\n    identifier");
 });
 
-test("gridTable: returns empty array for no rows", () => {
-  const result = gridTable(["Name", "Type"], []);
+test("listTable: returns empty array for no rows", () => {
+  const result = listTable(["Name", "Type"], []);
   assertEquals(result.length, 0);
 });
 
@@ -76,16 +80,48 @@ test("pathToAnchor: replaces braces with dashes", () => {
   );
 });
 
-test("gridTable: every emitted line has the same length", () => {
+test("listTable: a cell holding two blocks emits a loose list", () => {
+  const rows: TableRow[] = [
+    { cells: ["`id`", "`string`", "First paragraph.\n\nSecond paragraph."] },
+  ];
+
+  const output = listTable(["Name", "Type", "Description"], rows).join("\n");
+
+  // A loose row separates its items with blank lines so Pandoc reads each
+  // cell as block content rather than running the paragraphs together.
+  assertStringIncludes(output, "* * `id`\n\n  * `string`\n\n  * First paragraph.\n\n    Second paragraph.");
+});
+
+test("listTable: cell text is emitted verbatim, whatever its length", () => {
   const rows: TableRow[] = [
     { cells: ["`temp_ticket`", "`string`", "See [ref](#get-/v1/some/path) for details."] },
   ];
 
-  const lines = gridTable(["Name", "Type", "Description"], rows).filter(
-    (l) => l !== TABLE_DIV_OPEN && l !== TABLE_DIV_CLOSE,
-  );
+  const output = listTable(["Name", "Type", "Description"], rows).join("\n");
 
-  for (const line of lines) {
-    assertEquals(line.length, lines[0].length, `off-width line: ${JSON.stringify(line)}`);
-  }
+  assertStringIncludes(output, "  * See [ref](#get-/v1/some/path) for details.");
+});
+
+test("autoIdentifier: lowercases and joins words with hyphens", () => {
+  assertEquals(autoIdentifier("OAuth Integration Templates"), "oauth-integration-templates");
+});
+
+test("autoIdentifier: drops punctuation", () => {
+  assertEquals(autoIdentifier("Vanity URLs (beta)"), "vanity-urls-beta");
+});
+
+test("autoIdentifier: drops everything before the first letter", () => {
+  assertEquals(autoIdentifier("3. Bundles"), "bundles");
+});
+
+test("autoIdentifier: falls back to section when nothing is left", () => {
+  assertEquals(autoIdentifier("42 -- !"), "section");
+});
+
+test("disambiguateId: takes the first free number", () => {
+  assertEquals(disambiguateId("api-keys", new Set(["api-keys"])), "api-keys-1");
+  assertEquals(
+    disambiguateId("api-keys", new Set(["api-keys", "api-keys-1"])),
+    "api-keys-2",
+  );
 });

@@ -9,7 +9,7 @@ import type { Schema, Reference } from "./types.ts";
 import { isReference } from "./types.ts";
 import type { OpenAPISpec } from "./types.ts";
 import { resolve } from "./refs.ts";
-import { gridTable, type TableRow } from "./markdown.ts";
+import { listTable, type TableRow } from "./markdown.ts";
 
 interface PropertyRow {
   name: string;
@@ -172,7 +172,7 @@ function renderObject(
     cells: [row.name, row.type, row.description],
   }));
 
-  lines.push(...gridTable(["Name", "Type", "Description"], tableRows));
+  lines.push(...listTable(["Name", "Type", "Description"], tableRows));
   return lines;
 }
 
@@ -332,7 +332,10 @@ function buildDescription(schema: Schema, isRequired: boolean): string {
     attrs.push(`Default: \`${formatValue(schema.default)}\``);
   if (schema.minimum !== undefined) attrs.push(`Minimum: \`${schema.minimum}\``);
   if (schema.maximum !== undefined) attrs.push(`Maximum: \`${schema.maximum}\``);
-  if (schema.enum) attrs.push(`Enum: ${schema.enum.map((v) => `\`${v}\``).join(", ")}`);
+  if (schema.enum)
+    attrs.push(
+      `Enum: ${schema.enum.map((v) => `\`${formatValue(v)}\``).join(", ")}`,
+    );
   if (schema.example !== undefined)
     attrs.push(`Example: \`${formatValue(schema.example)}\``);
 
@@ -380,6 +383,7 @@ function formatPrimitiveType(schema: Schema): string {
 
 function formatValue(value: unknown): string {
   if (value === null) return "null";
-  if (typeof value === "string") return value;
+  // Quoted, because an empty code span renders as nothing at all.
+  if (typeof value === "string") return value === "" ? '""' : value;
   return JSON.stringify(value);
 }

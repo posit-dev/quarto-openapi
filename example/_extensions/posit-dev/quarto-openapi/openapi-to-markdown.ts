@@ -20,6 +20,10 @@ import { join, dirname, extname } from "node:path";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import type { OpenAPISpec } from "./lib/types.ts";
 import { groupByResource, renderApiReferenceBody } from "./lib/sections.ts";
+import {
+  escapePathBracesOutsideCode,
+  escapeSpecDescriptions,
+} from "./lib/escape.ts";
 
 type AnchorStyle = "operation-id" | "path";
 
@@ -102,6 +106,9 @@ async function main() {
     process.exit(1);
   }
 
+  // Make description prose safe to emit as markdown before anything reads it.
+  escapeSpecDescriptions(spec);
+
   console.log(`Loaded OpenAPI ${spec.openapi} spec: ${spec.info.title}`);
   console.log(`Paths: ${Object.keys(spec.paths).length}`);
   console.log(
@@ -143,7 +150,10 @@ async function main() {
   // Sections
   lines.push(...body);
 
-  const output = lines.join("\n") + "\n";
+  // Escape URL path parameters last, over the whole document: they occur in
+  // generated text as well as in descriptions. Anchor attributes are safe from
+  // this — sanitizeId strips braces, so `/{word}` never appears inside one.
+  const output = escapePathBracesOutsideCode(lines.join("\n") + "\n");
 
   // Write output
   const outputPath = join(projectDir, config.output);

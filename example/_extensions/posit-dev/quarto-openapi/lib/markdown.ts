@@ -1,38 +1,52 @@
 /**
  * Markdown generation utilities for Quarto-compatible output.
- * Produces Pandoc grid tables, fenced code blocks, tabsets, and anchored headings.
+ * Produces Quarto list tables, fenced code blocks, tabsets, and anchored headings.
  */
 
 export interface TableRow {
   cells: string[];
 }
 
-/** Fenced div markers wrapping every gridTable() block. */
+/** Fenced div markers wrapping every listTable() block. */
 export const TABLE_DIV_OPEN = "::: {.quarto-openapi-table}";
 export const TABLE_DIV_CLOSE = ":::";
 
 /**
- * Generate a Pandoc grid table.
- *
- * Grid tables support multi-line cells and are the most flexible
- * table format in Pandoc/Quarto.
- *
- * Grid tables are fixed-width: cells must be in their final form, because
- * changing a cell's length afterward breaks the alignment Pandoc needs to
- * read the table.
+ * Format a column-width fraction the way Lua's tostring does (%.14g), which
+ * is what Quarto's own grid-to-list table conversion emits.
  */
-export function gridTable(headers: string[], rows: TableRow[]): string[] {
+function formatWidth(x: number): string {
+  let s = x.toPrecision(14);
+  if (!s.includes("e") && s.includes(".")) {
+    s = s.replace(/0+$/, "").replace(/\.$/, "");
+  }
+  return s;
+}
+
+/**
+ * Generate a Quarto list table.
+ *
+ * Cells are emitted verbatim as markdown: a cell's first line follows the item
+ * marker and later lines are indented to the item's content level, so
+ * multi-line and multi-paragraph cells work. A row whose cells are all single
+ * blocks emits as a tight list; a row with any multi-block cell (one holding a
+ * blank line) emits loose, matching Pandoc list semantics.
+ *
+ * Unlike the grid tables this replaces, cell text does not have to be in its
+ * final form before layout — there is no alignment to preserve.
+ *
+ * Column width fractions are derived from the character widths a grid table
+ * would have used, so rendered column proportions do not change.
+ */
+export function listTable(headers: string[], rows: TableRow[]): string[] {
   if (rows.length === 0) return [];
 
   const numCols = headers.length;
 
-  // Split each cell into lines for multi-line support
   const headerLines = headers.map((h) => h.split("\n"));
-  const rowLines = rows.map((row) =>
-    row.cells.map((cell) => cell.split("\n"))
-  );
+  const rowLines = rows.map((row) => row.cells.map((cell) => cell.split("\n")));
 
-  // Compute column widths (max width of any line in any cell)
+  // Column content widths (max line length, minimum 4).
   const colWidths = new Array(numCols).fill(0);
   for (let col = 0; col < numCols; col++) {
     for (const line of headerLines[col]) {
@@ -43,36 +57,40 @@ export function gridTable(headers: string[], rows: TableRow[]): string[] {
         colWidths[col] = Math.max(colWidths[col], line.length);
       }
     }
-    // Minimum width of 4 for readability
     colWidths[col] = Math.max(colWidths[col], 4);
   }
 
+  // Width fractions as Pandoc's grid-table reader would have derived them:
+  // each column takes its content width plus two padding chars and one
+  // separator, over the full line width (or 72, whichever is larger).
+  const colUnits = colWidths.map((w) => w + 3);
+  const total = colUnits.reduce((a, b) => a + b, 0);
+  const denom = Math.max(72, total + 1);
+  const widths = colUnits.map((u) => formatWidth(u / denom)).join(",");
+
   const lines: string[] = [];
+  lines.push(TABLE_DIV_OPEN);
+  lines.push(`::: {.list-table header-rows="1" widths="${widths}"}`);
+  lines.push("");
 
-  const separator = (char: string) =>
-    "+" + colWidths.map((w) => char.repeat(w + 2)).join("+") + "+";
-
-  const emitRow = (cellLines: string[][]) => {
-    const maxLines = Math.max(...cellLines.map((cl) => cl.length));
-    for (let lineIdx = 0; lineIdx < maxLines; lineIdx++) {
-      const parts = cellLines.map((cl, col) => {
-        const text = lineIdx < cl.length ? cl[lineIdx] : "";
-        return " " + text.padEnd(colWidths[col]) + " ";
-      });
-      lines.push("|" + parts.join("|") + "|");
-    }
+  const emitGroup = (cellLines: string[][]) => {
+    // Loose when any cell holds more than one block.
+    const loose = cellLines.some((cl) => cl.some((line) => line === ""));
+    cellLines.forEach((cl, col) => {
+      if (loose && col > 0) lines.push("");
+      lines.push((col === 0 ? "* * " : "  * ") + cl[0]);
+      for (const line of cl.slice(1)) {
+        lines.push(line === "" ? "" : "    " + line);
+      }
+    });
+    lines.push("");
   };
 
-  lines.push(TABLE_DIV_OPEN);
-  lines.push(separator("-"));
-  emitRow(headerLines);
-  lines.push(separator("="));
+  emitGroup(headerLines);
+  for (const row of rowLines) emitGroup(row);
 
-  for (const row of rowLines) {
-    emitRow(row);
-    lines.push(separator("-"));
-  }
-
+  lines.push(":::");
+  lines.push("");
   lines.push(TABLE_DIV_CLOSE);
 
   return lines;
@@ -113,6 +131,34 @@ export function tabset(
  */
 export function sanitizeId(raw: string): string {
   return raw.replace(/[^A-Za-z0-9._\/-]/g, "-");
+}
+
+/**
+ * The anchor Pandoc derives from heading text when the heading declares none:
+ * drop everything up to the first letter, drop punctuation, lowercase, and
+ * join words with hyphens. An empty result becomes `section`.
+ */
+export function autoIdentifier(text: string): string {
+  const id = text
+    .replace(/^[^\p{L}]+/u, "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}_.\- \t]/gu, "")
+    .trim()
+    .replace(/[ \t]+/g, "-");
+  return id || "section";
+}
+
+/**
+ * The first anchor of the form `base-1`, `base-2`, … that `taken` does not
+ * hold. Matches how Pandoc numbers a heading whose anchor is already in use.
+ */
+export function disambiguateId(
+  base: string,
+  taken: ReadonlySet<string>,
+): string {
+  let n = 1;
+  while (taken.has(`${base}-${n}`)) n++;
+  return `${base}-${n}`;
 }
 
 /**

@@ -16,11 +16,14 @@ import type {
 import { HTTP_METHODS, isReference } from "./types.ts";
 import { resolve } from "./refs.ts";
 import { renderSchema } from "./schema.ts";
+import { stripCode } from "./escape.ts";
 import {
+  autoIdentifier,
+  disambiguateId,
   heading,
   methodBadge,
   pathToAnchor,
-  gridTable,
+  listTable,
   type TableRow,
 } from "./markdown.ts";
 
@@ -39,6 +42,11 @@ export interface Endpoint {
 
 export interface RenderOptions {
   anchorStyle: "operation-id" | "path";
+  /**
+   * Anchors that are already in use. A section heading whose derived anchor
+   * is in this set declares a numbered anchor instead.
+   */
+  takenIds?: Set<string>;
 }
 
 const DEFAULT_OPTIONS: RenderOptions = { anchorStyle: "operation-id" };
@@ -102,8 +110,8 @@ export function rewriteOperationIdRefs(text: string, idToPath: Map<string, strin
 
 /**
  * Rewrite operationId refs in every description and summary field of the
- * spec, in place. Runs before any rendering so tables are laid out with
- * final text (see gridTable).
+ * spec, in place. Runs before any rendering so every sink — prose, tables,
+ * tabsets — sees the same rewritten text.
  */
 export function rewriteSpecRefs(spec: OpenAPISpec, idToPath: Map<string, string>): void {
   const walk = (node: unknown): void => {
@@ -135,11 +143,78 @@ export function renderApiReferenceBody(
   if (anchorStyle === "path") {
     rewriteSpecRefs(spec, buildOperationIdToPathMap(spec));
   }
+  // Endpoints first: their anchors do not depend on the section headings, and
+  // a heading's derived anchor has to avoid every one of them.
+  const sections = groupByResource(spec);
+  const bodies = sections.map((section) =>
+    section.endpoints.flatMap((endpoint) => [
+      ...renderEndpoint(spec, endpoint, { anchorStyle }),
+      "",
+    ])
+  );
+
+  const takenIds = declaredAnchors(spec);
+  for (const anchor of anchorsIn(bodies.flat().join("\n"))) takenIds.add(anchor);
+
   const lines: string[] = [];
-  for (const section of groupByResource(spec)) {
-    lines.push(...renderSection(spec, section, { anchorStyle }));
-  }
+  sections.forEach((section, i) => {
+    lines.push(
+      heading(2, section.name, claimSectionAnchor(section.name, {
+        anchorStyle,
+        takenIds,
+      })),
+    );
+    lines.push("");
+    lines.push(...bodies[i]);
+  });
   return lines;
+}
+
+/** An anchor written as `{#id}`, or as `id="…"` inside an attribute block. */
+const DECLARED_ANCHOR = /\{#([^\s{}]+)\}|\{[^{}]*\bid="([^"]+)"[^{}]*\}/g;
+
+/**
+ * Every anchor `markdown` declares, ignoring any written inside code, which is
+ * an example of the syntax rather than a use of it. Takes one whole document,
+ * because a fenced block only reads as code when its opener and closer are
+ * scanned together.
+ */
+function anchorsIn(markdown: string): Set<string> {
+  const anchors = new Set<string>();
+  for (const [, hash, attr] of stripCode(markdown).matchAll(DECLARED_ANCHOR)) {
+    anchors.add(hash ?? attr);
+  }
+  return anchors;
+}
+
+/**
+ * The anchors the spec's own prose declares. Covers prose the rendered body
+ * does not hold, above all `info.description`, which the caller prepends.
+ *
+ * Quarto renames a derived anchor that collides with another derived anchor.
+ * It does not compare a derived anchor with a declared one: Quarto 1 warns and
+ * emits the duplicate, Quarto 2 emits it silently. So a section heading, whose
+ * anchor Quarto derives from its text, has to avoid these itself.
+ */
+function declaredAnchors(spec: OpenAPISpec): Set<string> {
+  const anchors = new Set<string>();
+  const walk = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      for (const item of node) walk(item);
+    } else if (node !== null && typeof node === "object") {
+      for (const [key, value] of Object.entries(node)) {
+        if (key === "description" && typeof value === "string") {
+          // One description at a time: each is its own document, and an
+          // unclosed fence in one must not swallow the next.
+          for (const anchor of anchorsIn(value)) anchors.add(anchor);
+        } else {
+          walk(value);
+        }
+      }
+    }
+  };
+  walk(spec);
+  return anchors;
 }
 
 /**
@@ -262,12 +337,39 @@ export function groupByResource(spec: OpenAPISpec): Section[] {
 }
 
 /**
+ * The anchor to declare on a section heading, or undefined to let Quarto
+ * derive it. A declared anchor is only needed when the derived one is taken;
+ * declaring one everywhere would pin anchors that Quarto already gets right.
+ *
+ * Adds whichever anchor the heading ends up with to `options.takenIds`, so two
+ * sections that collide take different numbers.
+ */
+function claimSectionAnchor(
+  name: string,
+  options: RenderOptions,
+): string | undefined {
+  const taken = options.takenIds;
+  if (!taken) return undefined;
+
+  const derived = autoIdentifier(name);
+  if (!taken.has(derived)) {
+    taken.add(derived);
+    return undefined;
+  }
+  const anchor = disambiguateId(derived, taken);
+  taken.add(anchor);
+  return anchor;
+}
+
+/**
  * Render a section with a ## heading and ### per endpoint.
  */
 export function renderSection(spec: OpenAPISpec, section: Section, options: RenderOptions = DEFAULT_OPTIONS): string[] {
   const lines: string[] = [];
 
-  lines.push(heading(2, section.name));
+  lines.push(
+    heading(2, section.name, claimSectionAnchor(section.name, options)),
+  );
   lines.push("");
 
   for (const endpoint of section.endpoints) {
@@ -444,7 +546,7 @@ function renderParameters(
       };
     });
 
-    lines.push(...gridTable(["Name", "Type", "Description"], rows));
+    lines.push(...listTable(["Name", "Type", "Description"], rows));
     lines.push("");
   }
 

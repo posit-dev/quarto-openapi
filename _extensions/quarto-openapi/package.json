@@ -4,6 +4,7 @@
   "type": "module",
   "description": "Dependencies for the quarto-openapi pre-render script. node resolves bare specifiers from node_modules upward from the script's directory, so they must be installed here, not at the repo root.",
   "dependencies": {
+    "markdown-it": "^15.0.1",
     "yaml": "^2.9.0"
   }
 }
