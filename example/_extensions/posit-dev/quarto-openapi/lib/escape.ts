@@ -125,6 +125,19 @@ function splitInlineCode(text: string): Segment[] {
 }
 
 /**
+ * `text` with every code span and literal block replaced by a newline, so a
+ * caller can scan the prose for syntax without matching an example of it.
+ *
+ * A newline rather than nothing, so the text on either side of a code span
+ * cannot join up and read as one construct.
+ */
+export function stripCode(text: string): string {
+  return splitCode(text)
+    .map((segment) => (segment.code ? "\n" : segment.text))
+    .join("");
+}
+
+/**
  * Escape square brackets that don't pair up into link or span syntax, e.g.
  * interval notation like `[timestamp, timestamp+interval)`. Paired brackets
  * are left alone, as is anything inside code.
@@ -208,7 +221,10 @@ export function fenceHtmlBlocks(text: string): string {
       ),
     );
     const fence = "`".repeat(Math.max(3, longest + 1));
-    out.push(`${fence}{=html}`, ...block, fence);
+    // Both fences sit at the block's own indentation. At column zero they
+    // would close whatever list item or blockquote contains the block.
+    const indent = block[0].slice(0, block[0].length - block[0].trimStart().length);
+    out.push(`${indent}${fence}{=html}`, ...block, `${indent}${fence}`);
     cursor = end;
   }
   out.push(...lines.slice(cursor));

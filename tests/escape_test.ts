@@ -237,3 +237,17 @@ test("fenceHtmlBlocks: leaves a tag inside a fenced code block alone", () => {
   const text = "```html\n<table>\n<tr><td>1</td></tr>\n</table>\n```";
   assertEquals(fenceHtmlBlocks(text), text);
 });
+
+test("fenceHtmlBlocks: indents the fences to match a block inside a list item", () => {
+  assertEquals(
+    fenceHtmlBlocks("- Item\n  <div>\n  content\n  </div>"),
+    "- Item\n  ```{=html}\n  <div>\n  content\n  </div>\n  ```",
+  );
+});
+
+test("fenceHtmlBlocks: indents to the shallowest line of the block", () => {
+  assertEquals(
+    fenceHtmlBlocks("  <div>\n    deeper\n  </div>"),
+    "  ```{=html}\n  <div>\n    deeper\n  </div>\n  ```",
+  );
+});
