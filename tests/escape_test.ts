@@ -251,3 +251,17 @@ test("fenceHtmlBlocks: indents to the shallowest line of the block", () => {
     "  ```{=html}\n  <div>\n    deeper\n  </div>\n  ```",
   );
 });
+
+test("fenceHtmlBlocks: keeps a blockquote marker outside the fence", () => {
+  assertEquals(
+    fenceHtmlBlocks("> <div>\n> content\n> </div>"),
+    "> ```{=html}\n> <div>\n> content\n> </div>\n> ```",
+  );
+});
+
+test("fenceHtmlBlocks: keeps a blockquote marker inside a list item", () => {
+  assertEquals(
+    fenceHtmlBlocks("- Item\n\n  > <div>\n  > content\n  > </div>"),
+    "- Item\n\n  > ```{=html}\n  > <div>\n  > content\n  > </div>\n  > ```",
+  );
+});

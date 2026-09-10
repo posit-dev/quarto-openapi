@@ -466,3 +466,45 @@ test("renderApiReferenceBody: ignores an anchor written inside a code span", () 
     `expected a bare heading, got:\n${body.slice(0, 300)}`,
   );
 });
+
+test("renderApiReferenceBody: ignores an anchor in an endpoint description code span", () => {
+  const spec = minimalSpec({
+    "/v1/keys": {
+      get: {
+        operationId: "listKeys",
+        summary: "List keys",
+        tags: ["API Keys"],
+        description: "Write `{#api-keys}` as literal syntax.",
+        responses: { "200": { description: "OK" } },
+      },
+    },
+  });
+
+  const body = renderApiReferenceBody(spec, "operation-id").join("\n");
+
+  assert(
+    body.includes("## API Keys\n"),
+    `expected a bare heading, got:\n${body.slice(0, 300)}`,
+  );
+});
+
+test("renderApiReferenceBody: ignores an anchor in a fenced code block", () => {
+  const spec = minimalSpec({
+    "/v1/keys": {
+      get: {
+        operationId: "listKeys",
+        summary: "List keys",
+        tags: ["API Keys"],
+        description: "Example:\n\n```markdown\n## Heading {#api-keys}\n```",
+        responses: { "200": { description: "OK" } },
+      },
+    },
+  });
+
+  const body = renderApiReferenceBody(spec, "operation-id").join("\n");
+
+  assert(
+    body.includes("## API Keys\n"),
+    `expected a bare heading, got:\n${body.slice(0, 300)}`,
+  );
+});

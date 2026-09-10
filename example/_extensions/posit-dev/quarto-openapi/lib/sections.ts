@@ -154,7 +154,7 @@ export function renderApiReferenceBody(
   );
 
   const takenIds = declaredAnchors(spec);
-  for (const anchor of anchorsIn(bodies.flat())) takenIds.add(anchor);
+  for (const anchor of anchorsIn(bodies.flat().join("\n"))) takenIds.add(anchor);
 
   const lines: string[] = [];
   sections.forEach((section, i) => {
@@ -173,20 +173,23 @@ export function renderApiReferenceBody(
 /** An anchor written as `{#id}`, or as `id="…"` inside an attribute block. */
 const DECLARED_ANCHOR = /\{#([^\s{}]+)\}|\{[^{}]*\bid="([^"]+)"[^{}]*\}/g;
 
-/** Every anchor declared in `lines`. */
-function anchorsIn(lines: Iterable<string>): Set<string> {
+/**
+ * Every anchor `markdown` declares, ignoring any written inside code, which is
+ * an example of the syntax rather than a use of it. Takes one whole document,
+ * because a fenced block only reads as code when its opener and closer are
+ * scanned together.
+ */
+function anchorsIn(markdown: string): Set<string> {
   const anchors = new Set<string>();
-  for (const line of lines) {
-    for (const [, hash, attr] of line.matchAll(DECLARED_ANCHOR)) {
-      anchors.add(hash ?? attr);
-    }
+  for (const [, hash, attr] of stripCode(markdown).matchAll(DECLARED_ANCHOR)) {
+    anchors.add(hash ?? attr);
   }
   return anchors;
 }
 
 /**
- * The anchors the spec's own prose declares, ignoring any written inside code,
- * which is an example of the syntax rather than a use of it.
+ * The anchors the spec's own prose declares. Covers prose the rendered body
+ * does not hold, above all `info.description`, which the caller prepends.
  *
  * Quarto renames a derived anchor that collides with another derived anchor.
  * It does not compare a derived anchor with a declared one: Quarto 1 warns and
@@ -194,14 +197,16 @@ function anchorsIn(lines: Iterable<string>): Set<string> {
  * anchor Quarto derives from its text, has to avoid these itself.
  */
 function declaredAnchors(spec: OpenAPISpec): Set<string> {
-  const prose: string[] = [];
+  const anchors = new Set<string>();
   const walk = (node: unknown): void => {
     if (Array.isArray(node)) {
       for (const item of node) walk(item);
     } else if (node !== null && typeof node === "object") {
       for (const [key, value] of Object.entries(node)) {
         if (key === "description" && typeof value === "string") {
-          prose.push(stripCode(value));
+          // One description at a time: each is its own document, and an
+          // unclosed fence in one must not swallow the next.
+          for (const anchor of anchorsIn(value)) anchors.add(anchor);
         } else {
           walk(value);
         }
@@ -209,7 +214,7 @@ function declaredAnchors(spec: OpenAPISpec): Set<string> {
     }
   };
   walk(spec);
-  return anchorsIn(prose);
+  return anchors;
 }
 
 /**

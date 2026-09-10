@@ -183,6 +183,12 @@ function transformOutsideCode(
 }
 
 /**
+ * The container prefix of a line: the indentation and blockquote markers that
+ * place it inside a list item, a quote, or both.
+ */
+const CONTAINER_PREFIX = /^(?:[ \t]|>[ \t]?)*/;
+
+/**
  * Wrap CommonMark HTML blocks in an explicit `{=html}` raw block.
  *
  * Quarto passes a bare block through as a raw HTML block and warns once per
@@ -221,10 +227,12 @@ export function fenceHtmlBlocks(text: string): string {
       ),
     );
     const fence = "`".repeat(Math.max(3, longest + 1));
-    // Both fences sit at the block's own indentation. At column zero they
-    // would close whatever list item or blockquote contains the block.
-    const indent = block[0].slice(0, block[0].length - block[0].trimStart().length);
-    out.push(`${indent}${fence}{=html}`, ...block, `${indent}${fence}`);
+    // Both fences repeat the block's container prefix — the indentation and
+    // blockquote markers that put it inside a list item or a quote. At column
+    // zero the opener would close that container, and the markers would then
+    // read as HTML content.
+    const prefix = block[0].match(CONTAINER_PREFIX)?.[0] ?? "";
+    out.push(`${prefix}${fence}{=html}`, ...block, `${prefix}${fence}`);
     cursor = end;
   }
   out.push(...lines.slice(cursor));
