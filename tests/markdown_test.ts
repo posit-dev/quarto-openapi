@@ -4,6 +4,8 @@ import {
   assertStringIncludes,
 } from "./assert.ts";
 import {
+  autoIdentifier,
+  disambiguateId,
   listTable,
   heading,
   pathToAnchor,
@@ -98,4 +100,28 @@ test("listTable: cell text is emitted verbatim, whatever its length", () => {
   const output = listTable(["Name", "Type", "Description"], rows).join("\n");
 
   assertStringIncludes(output, "  * See [ref](#get-/v1/some/path) for details.");
+});
+
+test("autoIdentifier: lowercases and joins words with hyphens", () => {
+  assertEquals(autoIdentifier("OAuth Integration Templates"), "oauth-integration-templates");
+});
+
+test("autoIdentifier: drops punctuation", () => {
+  assertEquals(autoIdentifier("Vanity URLs (beta)"), "vanity-urls-beta");
+});
+
+test("autoIdentifier: drops everything before the first letter", () => {
+  assertEquals(autoIdentifier("3. Bundles"), "bundles");
+});
+
+test("autoIdentifier: falls back to section when nothing is left", () => {
+  assertEquals(autoIdentifier("42 -- !"), "section");
+});
+
+test("disambiguateId: takes the first free number", () => {
+  assertEquals(disambiguateId("api-keys", new Set(["api-keys"])), "api-keys-1");
+  assertEquals(
+    disambiguateId("api-keys", new Set(["api-keys", "api-keys-1"])),
+    "api-keys-2",
+  );
 });

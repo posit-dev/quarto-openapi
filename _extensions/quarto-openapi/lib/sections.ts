@@ -17,6 +17,8 @@ import { HTTP_METHODS, isReference } from "./types.ts";
 import { resolve } from "./refs.ts";
 import { renderSchema } from "./schema.ts";
 import {
+  autoIdentifier,
+  disambiguateId,
   heading,
   methodBadge,
   pathToAnchor,
@@ -39,6 +41,11 @@ export interface Endpoint {
 
 export interface RenderOptions {
   anchorStyle: "operation-id" | "path";
+  /**
+   * Anchors that are already in use. A section heading whose derived anchor
+   * is in this set declares a numbered anchor instead.
+   */
+  takenIds?: Set<string>;
 }
 
 const DEFAULT_OPTIONS: RenderOptions = { anchorStyle: "operation-id" };
@@ -135,11 +142,66 @@ export function renderApiReferenceBody(
   if (anchorStyle === "path") {
     rewriteSpecRefs(spec, buildOperationIdToPathMap(spec));
   }
+  const takenIds = declaredAnchors(spec, anchorStyle);
   const lines: string[] = [];
   for (const section of groupByResource(spec)) {
-    lines.push(...renderSection(spec, section, { anchorStyle }));
+    lines.push(...renderSection(spec, section, { anchorStyle, takenIds }));
   }
   return lines;
+}
+
+/** The anchor an endpoint heading declares. */
+function endpointAnchor(
+  endpoint: Endpoint,
+  anchorStyle: RenderOptions["anchorStyle"],
+): string {
+  const { method, path, operation } = endpoint;
+  return anchorStyle === "path"
+    ? pathToAnchor(method, path)
+    : operation.operationId || pathToAnchor(method, path);
+}
+
+/** An anchor written as `{#id}`, or as `id="…"` inside an attribute block. */
+const DECLARED_ANCHOR = /\{#([^\s{}]+)\}|\{[^{}]*\bid="([^"]+)"[^{}]*\}/g;
+
+/**
+ * Every anchor the page declares outright: the ones the spec's prose writes,
+ * and the ones this generator gives each endpoint.
+ *
+ * Quarto renames a derived anchor that collides with another derived anchor.
+ * It does not compare a derived anchor with a declared one: Quarto 1 warns and
+ * emits the duplicate, Quarto 2 emits it silently. So a section heading, whose
+ * anchor Quarto derives from its text, has to avoid this set itself.
+ */
+function declaredAnchors(
+  spec: OpenAPISpec,
+  anchorStyle: RenderOptions["anchorStyle"],
+): Set<string> {
+  const anchors = new Set<string>();
+
+  const walk = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      for (const item of node) walk(item);
+    } else if (node !== null && typeof node === "object") {
+      for (const [key, value] of Object.entries(node)) {
+        if (key === "description" && typeof value === "string") {
+          for (const [, hash, attr] of value.matchAll(DECLARED_ANCHOR)) {
+            anchors.add(hash ?? attr);
+          }
+        } else {
+          walk(value);
+        }
+      }
+    }
+  };
+  walk(spec);
+
+  for (const section of groupByResource(spec)) {
+    for (const endpoint of section.endpoints) {
+      anchors.add(endpointAnchor(endpoint, anchorStyle));
+    }
+  }
+  return anchors;
 }
 
 /**
@@ -262,12 +324,39 @@ export function groupByResource(spec: OpenAPISpec): Section[] {
 }
 
 /**
+ * The anchor to declare on a section heading, or undefined to let Quarto
+ * derive it. A declared anchor is only needed when the derived one is taken;
+ * declaring one everywhere would pin anchors that Quarto already gets right.
+ *
+ * Adds whichever anchor the heading ends up with to `options.takenIds`, so two
+ * sections that collide take different numbers.
+ */
+function claimSectionAnchor(
+  name: string,
+  options: RenderOptions,
+): string | undefined {
+  const taken = options.takenIds;
+  if (!taken) return undefined;
+
+  const derived = autoIdentifier(name);
+  if (!taken.has(derived)) {
+    taken.add(derived);
+    return undefined;
+  }
+  const anchor = disambiguateId(derived, taken);
+  taken.add(anchor);
+  return anchor;
+}
+
+/**
  * Render a section with a ## heading and ### per endpoint.
  */
 export function renderSection(spec: OpenAPISpec, section: Section, options: RenderOptions = DEFAULT_OPTIONS): string[] {
   const lines: string[] = [];
 
-  lines.push(heading(2, section.name));
+  lines.push(
+    heading(2, section.name, claimSectionAnchor(section.name, options)),
+  );
   lines.push("");
 
   for (const endpoint of section.endpoints) {
@@ -325,9 +414,7 @@ function shiftHeadings(description: string): string {
 function renderEndpoint(spec: OpenAPISpec, endpoint: Endpoint, options: RenderOptions = DEFAULT_OPTIONS): string[] {
   const { method, path, operation } = endpoint;
   const title = operation.summary || `${methodBadge(method)} ${path}`;
-  const anchor = options.anchorStyle === "path"
-    ? pathToAnchor(method, path)
-    : operation.operationId || pathToAnchor(method, path);
+  const anchor = endpointAnchor(endpoint, options.anchorStyle);
 
   const lines: string[] = [];
 

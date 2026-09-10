@@ -134,6 +134,34 @@ export function sanitizeId(raw: string): string {
 }
 
 /**
+ * The anchor Pandoc derives from heading text when the heading declares none:
+ * drop everything up to the first letter, drop punctuation, lowercase, and
+ * join words with hyphens. An empty result becomes `section`.
+ */
+export function autoIdentifier(text: string): string {
+  const id = text
+    .replace(/^[^\p{L}]+/u, "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}_.\- \t]/gu, "")
+    .trim()
+    .replace(/[ \t]+/g, "-");
+  return id || "section";
+}
+
+/**
+ * The first anchor of the form `base-1`, `base-2`, … that `taken` does not
+ * hold. Matches how Pandoc numbers a heading whose anchor is already in use.
+ */
+export function disambiguateId(
+  base: string,
+  taken: ReadonlySet<string>,
+): string {
+  let n = 1;
+  while (taken.has(`${base}-${n}`)) n++;
+  return `${base}-${n}`;
+}
+
+/**
  * Generate a heading with an explicit anchor ID.
  */
 export function heading(level: number, text: string, id?: string): string {

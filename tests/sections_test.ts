@@ -1,6 +1,6 @@
 import { test } from "node:test";
-import { assertEquals } from "./assert.ts";
-import { groupByResource, buildOperationIdToPathMap, rewriteOperationIdRefs } from "../_extensions/quarto-openapi/lib/sections.ts";
+import { assert, assertEquals } from "./assert.ts";
+import { groupByResource, buildOperationIdToPathMap, renderApiReferenceBody, rewriteOperationIdRefs } from "../_extensions/quarto-openapi/lib/sections.ts";
 import type { OpenAPISpec } from "../_extensions/quarto-openapi/lib/types.ts";
 
 function minimalSpec(paths: OpenAPISpec["paths"]): OpenAPISpec {
@@ -342,4 +342,66 @@ test("rewriteOperationIdRefs handles multiple occurrences", () => {
   const expected = "Call (#get-/v1/tasks/-id-) first, then (#get-/v1/tasks/-id-) again.";
 
   assertEquals(rewriteOperationIdRefs(input, idToPath), expected);
+});
+
+test("renderApiReferenceBody: disambiguates a group heading against a prose anchor", () => {
+  const spec = minimalSpec({
+    "/v1/keys": {
+      get: {
+        operationId: "listKeys",
+        summary: "List keys",
+        tags: ["API Keys"],
+        responses: { "200": { description: "OK" } },
+      },
+    },
+  });
+  spec.info.description = "## API Keys {#api-keys}\n\nHow to authenticate.";
+
+  const body = renderApiReferenceBody(spec, "operation-id").join("\n");
+
+  assert(
+    body.includes('## API Keys {id="api-keys-1"}'),
+    `expected a disambiguated heading, got:\n${body.slice(0, 300)}`,
+  );
+});
+
+test("renderApiReferenceBody: leaves an uncontested group heading bare", () => {
+  const spec = minimalSpec({
+    "/v1/users": {
+      get: {
+        operationId: "listUsers",
+        summary: "List users",
+        tags: ["Users"],
+        responses: { "200": { description: "OK" } },
+      },
+    },
+  });
+
+  const body = renderApiReferenceBody(spec, "operation-id").join("\n");
+
+  assert(body.includes("## Users\n"), `expected a bare heading, got:\n${body.slice(0, 200)}`);
+});
+
+test("renderApiReferenceBody: disambiguates a group heading against an endpoint anchor", () => {
+  const spec = minimalSpec({
+    "/v1/bootstrap": {
+      post: {
+        operationId: "bootstrap",
+        summary: "Create the first administrator",
+        tags: ["Bootstrap"],
+        responses: { "200": { description: "OK" } },
+      },
+    },
+  });
+
+  const body = renderApiReferenceBody(spec, "operation-id").join("\n");
+
+  assert(
+    body.includes('## Bootstrap {id="bootstrap-1"}'),
+    `expected a disambiguated heading, got:\n${body.slice(0, 300)}`,
+  );
+  assert(
+    body.includes('### Create the first administrator {id="bootstrap"}'),
+    "expected the endpoint to keep its anchor",
+  );
 });
