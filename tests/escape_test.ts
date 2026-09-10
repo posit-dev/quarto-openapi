@@ -265,3 +265,13 @@ test("fenceHtmlBlocks: keeps a blockquote marker inside a list item", () => {
     "- Item\n\n  > ```{=html}\n  > <div>\n  > content\n  > </div>\n  > ```",
   );
 });
+
+test("fenceHtmlBlocks: leaves a block that opens on a list-marker line alone", () => {
+  const text = "- <div>\n  content\n  </div>";
+  assertEquals(fenceHtmlBlocks(text), text);
+});
+
+test("fenceHtmlBlocks: leaves a block that opens on an ordered-marker line alone", () => {
+  const text = "1. <div>\n   content\n   </div>";
+  assertEquals(fenceHtmlBlocks(text), text);
+});

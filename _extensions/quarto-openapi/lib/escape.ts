@@ -219,6 +219,23 @@ export function fenceHtmlBlocks(text: string): string {
   for (const [start, end] of blocks) {
     out.push(...lines.slice(cursor, start));
     const block = lines.slice(start, end);
+
+    // Both fences repeat the block's container prefix — the indentation and
+    // blockquote markers that put it inside a list item or a quote. At column
+    // zero the opener would close that container, and the markers would then
+    // read as HTML content.
+    const prefix = block[0].match(CONTAINER_PREFIX)?.[0] ?? "";
+
+    // A block can also open on the line that opens its list item, as in
+    // `- <div>`. Fencing that needs the item's marker held back and every
+    // line re-indented, so leave the block bare instead: Quarto renders it
+    // the same either way and only warns.
+    if (!block[0].startsWith("<", prefix.length)) {
+      out.push(...block);
+      cursor = end;
+      continue;
+    }
+
     // The fence has to outrun the longest backtick run in the block it holds.
     const longest = Math.max(
       0,
@@ -227,11 +244,6 @@ export function fenceHtmlBlocks(text: string): string {
       ),
     );
     const fence = "`".repeat(Math.max(3, longest + 1));
-    // Both fences repeat the block's container prefix — the indentation and
-    // blockquote markers that put it inside a list item or a quote. At column
-    // zero the opener would close that container, and the markers would then
-    // read as HTML content.
-    const prefix = block[0].match(CONTAINER_PREFIX)?.[0] ?? "";
     out.push(`${prefix}${fence}{=html}`, ...block, `${prefix}${fence}`);
     cursor = end;
   }
