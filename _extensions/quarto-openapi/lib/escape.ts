@@ -6,10 +6,18 @@
  * opens an attribute block, and a bare HTML tag becomes a raw inline. Quarto 2
  * hard-errors on the first two and warns on the third.
  *
- * Every rewrite here skips code spans and fenced code blocks, where braces and
- * angle brackets already render verbatim and a backslash or backtick would
- * become literal output rather than markup.
+ * Every rewrite here skips code, where braces and angle brackets already render
+ * verbatim and a backslash or backtick would become literal output rather than
+ * markup. A CommonMark parser decides what is code: block structure is where
+ * hand-rolled scanning goes wrong, because a fence can open inside a list item,
+ * carry any indentation, and never close.
  */
+
+import MarkdownIt from "markdown-it";
+import type { Token } from "markdown-it";
+
+/** CommonMark, so the reading matches the spec the descriptions are written to. */
+const md = new MarkdownIt("commonmark");
 
 /** A run of text that is either markdown prose or literal code. */
 interface Segment {
@@ -18,79 +26,75 @@ interface Segment {
 }
 
 /**
- * An opening code fence: three or more backticks or tildes at the start of a
- * line, with any indentation. CommonMark allows up to three spaces, but a fence
- * inside a list-table cell is indented to the item's content level, so a
- * further-indented fence has to count too — see `splitCode` for the condition
- * that keeps that from misreading an indented code block.
+ * Token types whose source lines are literal content. `html_block` is not code,
+ * but its angle brackets and braces are markup for a browser rather than for
+ * Quarto, so the rewrites have to leave it alone too.
  */
-const FENCE_OPEN = /^([ \t]*)(`{3,}|~{3,})/;
+const LITERAL_BLOCKS = new Set(["fence", "code_block", "html_block"]);
 
-/** A line holding nothing but a fence. */
-const FENCE_CLOSE = /^([ \t]*)(`{3,}|~{3,})[ \t]*$/;
+/**
+ * Line ranges, as `[start, end)` line indices, that the parser reads as
+ * literal blocks.
+ */
+function literalBlockRanges(text: string): [number, number][] {
+  const ranges: [number, number][] = [];
+  const walk = (tokens: Token[]): void => {
+    for (const token of tokens) {
+      if (LITERAL_BLOCKS.has(token.type) && token.map) ranges.push(token.map);
+      if (token.children) walk(token.children);
+    }
+  };
+  walk(md.parse(text, {}));
+  return ranges;
+}
 
-/** Indentation in columns, expanding tabs to four-column stops as CommonMark does. */
-function indentWidth(indent: string): number {
-  let width = 0;
-  for (const c of indent) {
-    width = c === "\t" ? width + 4 - (width % 4) : width + 1;
+/** The character offset at which each line of `text` starts. */
+function lineOffsets(text: string): number[] {
+  const offsets = [0];
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === "\n") offsets.push(i + 1);
   }
-  return width;
-}
-
-/** The index of the newline ending the line at `from`, or the end of `text`. */
-function lineEnd(text: string, from: number): number {
-  const nl = text.indexOf("\n", from);
-  return nl === -1 ? text.length : nl;
+  return offsets;
 }
 
 /**
- * Whether `line` closes a fence opened with `marker` at `openIndent` columns.
- * The fence must use the same character and be at least as long, and it may
- * shift by up to the three columns CommonMark allows either fence to be
- * indented by within its containing block.
- */
-function closesFence(
-  line: string,
-  marker: string,
-  openIndent: number,
-): boolean {
-  const close = line.match(FENCE_CLOSE);
-  if (!close) return false;
-  const [, indent, found] = close;
-  return found[0] === marker[0] &&
-    found.length >= marker.length &&
-    Math.abs(indentWidth(indent) - openIndent) <= 3;
-}
-
-/**
- * Return the end of the fenced block opened by `marker` on the line at
- * `start`, including the closing fence, or -1 when nothing closes it.
- */
-function fenceEnd(
-  text: string,
-  start: number,
-  marker: string,
-  openIndent: number,
-): number {
-  let i = lineEnd(text, start);
-  while (i < text.length) {
-    i++; // step over the newline ending the previous line
-    const end = lineEnd(text, i);
-    if (closesFence(text.slice(i, end), marker, openIndent)) return end;
-    i = end;
-  }
-  return -1;
-}
-
-/**
- * Split `text` into prose and code segments. Code segments are fenced blocks
- * and inline code spans; concatenating every segment reproduces `text`.
+ * Split `text` into prose and code segments. Concatenating every segment
+ * reproduces `text`.
+ *
+ * Literal blocks come from the parser. Inline code spans are found by pairing
+ * backtick runs in what is left, which is all CommonMark asks for once block
+ * structure is settled.
  */
 function splitCode(text: string): Segment[] {
+  const offsets = lineOffsets(text);
+  const blocks = literalBlockRanges(text)
+    .map(([start, end]): [number, number] => [
+      offsets[start] ?? text.length,
+      offsets[end] ?? text.length,
+    ])
+    .sort((a, b) => a[0] - b[0]);
+
+  const segments: Segment[] = [];
+  const push = (code: boolean, chunk: string) => {
+    if (chunk) segments.push({ code, text: chunk });
+  };
+
+  let cursor = 0;
+  for (const [start, end] of blocks) {
+    if (start < cursor) continue; // nested inside a block already taken
+    push(false, "");
+    segments.push(...splitInlineCode(text.slice(cursor, start)));
+    push(true, text.slice(start, end));
+    cursor = end;
+  }
+  segments.push(...splitInlineCode(text.slice(cursor)));
+  return segments;
+}
+
+/** Split prose into segments, marking inline code spans as code. */
+function splitInlineCode(text: string): Segment[] {
   const segments: Segment[] = [];
   let start = 0;
-  let atLineStart = true;
   let i = 0;
 
   const emit = (end: number, code: boolean) => {
@@ -99,49 +103,22 @@ function splitCode(text: string): Segment[] {
   };
 
   while (i < text.length) {
-    if (atLineStart) {
-      const open = text.slice(i, lineEnd(text, i)).match(FENCE_OPEN);
-      if (open) {
-        const [, indent, marker] = open;
-        const openIndent = indentWidth(indent);
-        const end = fenceEnd(text, i, marker, openIndent);
-        // An unclosed fence runs to the end of the text, except past three
-        // columns of indentation: there a lone fence is the literal content of
-        // an indented code block, and reading it as an opener would swallow
-        // every rewrite in the prose that follows.
-        if (end !== -1 || openIndent <= 3) {
-          emit(i, false);
-          i = end === -1 ? text.length : end;
-          emit(i, true);
-          continue;
-        }
-        // Literal content, not a fence: keep it in the prose segment and scan
-        // on, so the run cannot pair with a later one as an inline code span.
-        i += indent.length + marker.length;
-        atLineStart = false;
-        continue;
-      }
-    }
-    const c = text[i];
-    if (c === "`") {
-      // An inline code span closes on a backtick run of the same length.
-      let run = 0;
-      while (text[i + run] === "`") run++;
-      const close = text.indexOf("`".repeat(run), i + run);
-      emit(i, false);
-      i = close === -1 ? i + run : close + run;
-      emit(i, true);
-      atLineStart = false;
-      continue;
-    }
-    if (c === "\\") {
+    if (text[i] === "\\") {
       // An escaped backtick cannot open a code span.
       i += 2;
-      atLineStart = false;
       continue;
     }
-    atLineStart = c === "\n";
-    i++;
+    if (text[i] !== "`") {
+      i++;
+      continue;
+    }
+    // A code span closes on a backtick run of the same length.
+    let run = 0;
+    while (text[i + run] === "`") run++;
+    const close = text.indexOf("`".repeat(run), i + run);
+    emit(i, false);
+    i = close === -1 ? i + run : close + run;
+    emit(i, true);
   }
   emit(text.length, false);
   return segments;
@@ -181,7 +158,7 @@ export function escapeUnmatchedBrackets(text: string): string {
 
 /**
  * Apply `fn` to the parts of `text` that are ordinary markdown prose, passing
- * inline code spans and fenced code blocks through untouched.
+ * code through untouched.
  */
 function transformOutsideCode(
   text: string,
@@ -190,6 +167,52 @@ function transformOutsideCode(
   return splitCode(text)
     .map((segment) => (segment.code ? segment.text : fn(segment.text)))
     .join("");
+}
+
+/**
+ * Wrap CommonMark HTML blocks in an explicit `{=html}` raw block.
+ *
+ * Quarto passes a bare block through as a raw HTML block and warns once per
+ * element. Fencing it says the same thing without the warning, and keeps the
+ * block a block. Marking each tag as a raw *inline* instead would not: the
+ * block becomes paragraph content, which leaves an empty paragraph on either
+ * side and runs the text of neighboring cells together in a search index.
+ *
+ * One difference to accept: Quarto reads the text inside a bare block as
+ * markdown, so `doesn't` picks up a curly apostrophe there and stays straight
+ * inside a fence. Fencing is what the format means, and no explicit form
+ * reproduces the implicit one exactly.
+ *
+ * Runs before `markInlineHtmlExplicit`, which skips code and so leaves the
+ * fenced block alone.
+ */
+export function fenceHtmlBlocks(text: string): string {
+  const blocks = md
+    .parse(text, {})
+    .filter((token) => token.type === "html_block" && token.map)
+    .map((token) => token.map as [number, number]);
+  if (blocks.length === 0) return text;
+
+  const lines = text.split("\n");
+  const out: string[] = [];
+  let cursor = 0;
+
+  for (const [start, end] of blocks) {
+    out.push(...lines.slice(cursor, start));
+    const block = lines.slice(start, end);
+    // The fence has to outrun the longest backtick run in the block it holds.
+    const longest = Math.max(
+      0,
+      ...block.flatMap((line) =>
+        [...line.matchAll(/`+/g)].map((run) => run[0].length)
+      ),
+    );
+    const fence = "`".repeat(Math.max(3, longest + 1));
+    out.push(`${fence}{=html}`, ...block, fence);
+    cursor = end;
+  }
+  out.push(...lines.slice(cursor));
+  return out.join("\n");
 }
 
 /**
@@ -231,9 +254,10 @@ export function escapePathBracesOutsideCode(text: string): string {
  * Apply the prose-safety rewrites to every `description` field in the spec, in
  * place, so all sinks — prose, tables, tabsets — emit safe text.
  *
- * HTML is marked first: it wraps each tag in backticks, so the bracket pass
- * then sees those as code spans and leaves any `[` inside an attribute (e.g.
- * `href="…?a[0]=1"`) alone.
+ * HTML blocks are fenced first, so the later passes see them as code and leave
+ * them verbatim. Remaining tags are inline, and marking them wraps each one in
+ * backticks, so the bracket pass then sees those as code spans and leaves any
+ * `[` inside an attribute (e.g. `href="…?a[0]=1"`) alone.
  */
 export function escapeSpecDescriptions(node: unknown): void {
   if (Array.isArray(node)) {
@@ -242,7 +266,9 @@ export function escapeSpecDescriptions(node: unknown): void {
     const obj = node as Record<string, unknown>;
     for (const [key, value] of Object.entries(obj)) {
       if (key === "description" && typeof value === "string") {
-        obj[key] = escapeUnmatchedBrackets(markInlineHtmlExplicit(value));
+        obj[key] = escapeUnmatchedBrackets(
+          markInlineHtmlExplicit(fenceHtmlBlocks(value)),
+        );
       } else {
         escapeSpecDescriptions(value);
       }

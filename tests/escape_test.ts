@@ -4,6 +4,7 @@ import {
   escapePathBracesOutsideCode,
   escapeSpecDescriptions,
   escapeUnmatchedBrackets,
+  fenceHtmlBlocks,
   markInlineHtmlExplicit,
 } from "../_extensions/quarto-openapi/lib/escape.ts";
 
@@ -178,4 +179,61 @@ test("escapePathBracesOutsideCode: a tab counts as four columns of indent", () =
 test("escapeUnmatchedBrackets: a closing fence may shift up to three spaces", () => {
   const text = "  ```json\n[1, 2}\n   ```\n";
   assertEquals(escapeUnmatchedBrackets(text), text);
+});
+
+test("fenceHtmlBlocks: fences a block-level element as a raw HTML block", () => {
+  const text = "<table>\n<tr><td>1</td></tr>\n</table>";
+  assertEquals(
+    fenceHtmlBlocks(text),
+    "```{=html}\n<table>\n<tr><td>1</td></tr>\n</table>\n```",
+  );
+});
+
+test("fenceHtmlBlocks: leaves an inline tag inside a paragraph alone", () => {
+  const text = 'Download the <a href="/x.tar.gz">bundle</a>.';
+  assertEquals(fenceHtmlBlocks(text), text);
+});
+
+test("fenceHtmlBlocks: leaves an autolink that opens a line alone", () => {
+  const text = "<https://example.com> is the home page.";
+  assertEquals(fenceHtmlBlocks(text), text);
+});
+
+test("fenceHtmlBlocks: ends the block at a blank line", () => {
+  assertEquals(
+    fenceHtmlBlocks("<hr>\n\nAfter the rule."),
+    "```{=html}\n<hr>\n```\n\nAfter the rule.",
+  );
+});
+
+test("fenceHtmlBlocks: outruns a backtick run inside the block", () => {
+  assertEquals(
+    fenceHtmlBlocks("<p>Use ```code``` here</p>"),
+    "````{=html}\n<p>Use ```code``` here</p>\n````",
+  );
+});
+
+test("escapeSpecDescriptions: fences a block-level HTML table", () => {
+  const spec = {
+    info: { description: "Codes:\n\n<table>\n<tr><td>1</td></tr>\n</table>" },
+  };
+
+  escapeSpecDescriptions(spec);
+
+  assertEquals(
+    spec.info.description,
+    "Codes:\n\n```{=html}\n<table>\n<tr><td>1</td></tr>\n</table>\n```",
+  );
+});
+
+test("fenceHtmlBlocks: fences a block that follows prose", () => {
+  assertEquals(
+    fenceHtmlBlocks("Intro.\n\n<div class=\"x\">\ncontent\n</div>\n\nOutro."),
+    "Intro.\n\n```{=html}\n<div class=\"x\">\ncontent\n</div>\n```\n\nOutro.",
+  );
+});
+
+test("fenceHtmlBlocks: leaves a tag inside a fenced code block alone", () => {
+  const text = "```html\n<table>\n<tr><td>1</td></tr>\n</table>\n```";
+  assertEquals(fenceHtmlBlocks(text), text);
 });
