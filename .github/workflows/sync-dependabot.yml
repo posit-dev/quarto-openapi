@@ -1,0 +1,46 @@
+name: Sync example on Dependabot PRs
+
+# Dependabot updates only _extensions/quarto-openapi, so the example copy of
+# the extension falls out of sync. This workflow copies the change into the
+# example and pushes it to the PR branch.
+#
+# GitHub does not start workflows for pushes made with GITHUB_TOKEN, so the
+# workflow then dispatches the tests on the PR branch.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  sync:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: npm run sync-example
+      - name: Push the synced example
+        id: push
+        run: |
+          if git diff --quiet; then
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore: sync example copy of the extension"
+          git push
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+      - name: Run the tests on the synced commit
+        if: steps.push.outputs.pushed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run test.yml --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_HEAD_REF"

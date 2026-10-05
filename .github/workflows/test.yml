@@ -5,6 +5,8 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # sync-dependabot.yml dispatches this after it pushes to a Dependabot PR.
+  workflow_dispatch:
 
 jobs:
   test:
