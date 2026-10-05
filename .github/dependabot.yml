@@ -1,0 +1,6 @@
+version: 2
+updates:
+  - package-ecosystem: "npm" 
+    directory: "_extensions/quarto-openapi"
+    schedule:
+      interval: "weekly"
