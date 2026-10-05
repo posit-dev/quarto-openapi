@@ -1,6 +1,10 @@
 version: 2
 updates:
-  - package-ecosystem: "npm" 
+  - package-ecosystem: "npm"
     directory: "_extensions/quarto-openapi"
     schedule:
       interval: "weekly"
+    groups:
+      extension-dependencies:
+        patterns:
+          - "*"
