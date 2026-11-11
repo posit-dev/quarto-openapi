@@ -126,7 +126,23 @@ Schema tables handle:
 - Nested objects: flattened as indented dotted rows (e.g., `owner.guid`)
 - Arrays of objects: expanded inline with their properties
 - `allOf` composition: merged into a single property table
+- `anyOf`/`oneOf` composition: typed by the alternatives' names joined with `|`
+  (`Owner|null`, `Cat|Dog`); a nullable reference to an object also lists the
+  object's properties
 - Property attributes: required, read-only, nullable, default, minimum/maximum, enum, example, format
+
+### Field tables and `llms-txt`
+
+Quarto builds each `.llms.md` page from the rendered HTML with Pandoc's GFM
+writer. A GFM table cell holds inline content only, so Pandoc writes `[TABLE]`
+in place of any table with a paragraph break, list or line break in a cell.
+
+To keep every table, each Description cell is a single paragraph. A
+description's paragraphs and the field's attributes become spans that the
+extension's stylesheet lays out as separate lines, so the HTML reads as
+paragraphs and the GFM conversion sees one. Content that cannot be inline, such
+as a list or a code block, is listed under the table with the field's name, and
+the cell says "Continued below the table."
 
 ## Project structure
 
@@ -143,6 +159,7 @@ quarto-openapi/
         refs.ts                 # $ref resolution
         sections.ts             # path grouping and endpoint rendering
         schema.ts               # schema-to-table conversion
+        fields.ts               # Name/Type/Description field tables
         markdown.ts             # list table and markdown utilities
         escape.ts               # makes description prose safe as markdown
   tests/                        # node:test suites for lib/

@@ -92,6 +92,14 @@ test("listTable: a cell holding two blocks emits a loose list", () => {
   assertStringIncludes(output, "* * `id`\n\n  * `string`\n\n  * First paragraph.\n\n    Second paragraph.");
 });
 
+test("listTable: an empty cell keeps the row tight", () => {
+  const rows: TableRow[] = [{ cells: ["`id`", "`string`", ""] }];
+
+  const output = listTable(["Name", "Type", "Description"], rows).join("\n");
+
+  assertStringIncludes(output, "* * `id`\n  * `string`\n  * \n");
+});
+
 test("listTable: cell text is emitted verbatim, whatever its length", () => {
   const rows: TableRow[] = [
     { cells: ["`temp_ticket`", "`string`", "See [ref](#get-/v1/some/path) for details."] },

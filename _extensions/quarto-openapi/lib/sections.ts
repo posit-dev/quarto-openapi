@@ -23,9 +23,8 @@ import {
   heading,
   methodBadge,
   pathToAnchor,
-  listTable,
-  type TableRow,
 } from "./markdown.ts";
+import { fieldTable, type FieldRow } from "./fields.ts";
 
 export interface Section {
   /** Resource name, e.g., "content", "bundles" */
@@ -523,7 +522,7 @@ function renderParameters(
       lines.push("");
     }
 
-    const rows: TableRow[] = params.map((param) => {
+    const rows: FieldRow[] = params.map((param) => {
       const schema = param.schema
         ? resolve<Schema>(spec, param.schema)
         : undefined;
@@ -533,20 +532,16 @@ function renderParameters(
       if (schema?.format) typeParts.push(`(${schema.format})`);
       const typeStr = typeParts.length > 0 ? typeParts.join(" ") : "string";
 
-      const descParts: string[] = [];
-      if (param.description) descParts.push(param.description.trim());
-      if (param.required) descParts.push("Required.");
-
       return {
-        cells: [
-          `\`${param.name}\``,
-          `\`${typeStr}\``,
-          descParts.join(" "),
-        ],
+        name: param.name,
+        depth: 0,
+        type: typeStr,
+        description: param.description?.trim() ?? "",
+        attributes: param.required ? "Required." : "",
       };
     });
 
-    lines.push(...listTable(["Name", "Type", "Description"], rows));
+    lines.push(...fieldTable(rows));
     lines.push("");
   }
 

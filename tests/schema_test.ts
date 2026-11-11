@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import {
   assert,
+  assertFalse,
   assertEquals,
   assertStringIncludes,
 } from "./assert.ts";
@@ -428,4 +429,99 @@ test("renderSchema: enum values go through the same formatter as defaults", () =
   const output = rendered(spec, schema);
 
   assertStringIncludes(output, 'Enum: `""`, `fast`, `null`');
+});
+
+test("renderSchema: a nullable reference is named and expanded", () => {
+  const spec = specWithSchemas({
+    Source: {
+      type: "object",
+      required: ["choice"],
+      properties: {
+        choice: { type: "string", enum: ["git", "none"] },
+        gitUrl: { type: "string" },
+      },
+    },
+  });
+  const output = rendered(spec, {
+    type: "object",
+    required: ["source"],
+    properties: {
+      source: {
+        description: "Where the source lives.",
+        anyOf: [
+          { $ref: "#/components/schemas/Source" } as unknown as Schema,
+          { nullable: true },
+        ],
+      },
+    },
+  });
+
+  assertStringIncludes(output, "* * `source`\n  * `Source|null`");
+  assertStringIncludes(output, "[Where the source lives.]{.schema-para}");
+  assertStringIncludes(output, "[Required.]{.schema-attrs}");
+  assertStringIncludes(output, "* * [`source.choice`]{.schema-nest-1}");
+  assertStringIncludes(output, "* * [`source.gitUrl`]{.schema-nest-1}");
+  assertFalse(output.includes("unknown"), output);
+});
+
+test("renderSchema: alternatives are joined with |", () => {
+  const spec = specWithSchemas({
+    Cat: { type: "object", properties: { purrs: { type: "boolean" } } },
+    Dog: { type: "object", properties: { barks: { type: "boolean" } } },
+  });
+  const output = rendered(spec, {
+    type: "object",
+    properties: {
+      pet: {
+        oneOf: [
+          { $ref: "#/components/schemas/Cat" } as unknown as Schema,
+          { $ref: "#/components/schemas/Dog" } as unknown as Schema,
+        ],
+      },
+      id: { anyOf: [{ type: "string" }, { type: "integer" }] },
+    },
+  });
+
+  assertStringIncludes(output, "* * `pet`\n  * `Cat|Dog`");
+  assertStringIncludes(output, "* * `id`\n  * `string|integer`");
+  // Neither alternative is listed as if it were the only one.
+  assertFalse(output.includes("pet.purrs"), output);
+});
+
+test("renderSchema: a schema with no type constraint is any", () => {
+  const output = rendered(specWithSchemas(), {
+    type: "object",
+    properties: { value: { description: "Any JSON value." } },
+  });
+  assertStringIncludes(output, "* * `value`\n  * `any`");
+});
+
+test("renderSchema: a recursive nullable reference expands once", () => {
+  const spec = specWithSchemas({
+    Expr: {
+      type: "object",
+      properties: {
+        operator: { type: "string" },
+        operands: {
+          type: "array",
+          items: { $ref: "#/components/schemas/Expr" } as unknown as Schema,
+        },
+      },
+    },
+  });
+  const output = rendered(spec, {
+    type: "object",
+    properties: {
+      visible: {
+        anyOf: [
+          { $ref: "#/components/schemas/Expr" } as unknown as Schema,
+          { nullable: true },
+        ],
+      },
+    },
+  });
+
+  assertStringIncludes(output, "* * `visible`\n  * `Expr|null`");
+  assertStringIncludes(output, "[`visible.operands`]{.schema-nest-1}");
+  assertFalse(output.includes("visible.operands[].operator"), output);
 });

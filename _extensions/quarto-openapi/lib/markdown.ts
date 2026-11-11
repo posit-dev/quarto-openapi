@@ -74,8 +74,9 @@ export function listTable(headers: string[], rows: TableRow[]): string[] {
   lines.push("");
 
   const emitGroup = (cellLines: string[][]) => {
-    // Loose when any cell holds more than one block.
-    const loose = cellLines.some((cl) => cl.some((line) => line === ""));
+    // Loose when any cell holds more than one block. An empty cell is one
+    // empty line, not a block separator.
+    const loose = cellLines.some((cl) => cl.length > 1 && cl.includes(""));
     cellLines.forEach((cl, col) => {
       if (loose && col > 0) lines.push("");
       lines.push((col === 0 ? "* * " : "  * ") + cl[0]);

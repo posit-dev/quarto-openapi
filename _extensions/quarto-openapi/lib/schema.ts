@@ -9,13 +9,7 @@ import type { Schema, Reference } from "./types.ts";
 import { isReference } from "./types.ts";
 import type { OpenAPISpec } from "./types.ts";
 import { resolve } from "./refs.ts";
-import { listTable, type TableRow } from "./markdown.ts";
-
-interface PropertyRow {
-  name: string;
-  type: string;
-  description: string;
-}
+import { fieldTable, type FieldRow } from "./fields.ts";
 
 /**
  * Render a schema as markdown lines (description + property table).
@@ -56,7 +50,7 @@ export function renderSchema(
 
   // Primitive type
   if (type) {
-    lines.push(formatPrimitiveType(resolved));
+    lines.push(formatPrimitiveType(spec, resolved));
   }
 
   return lines;
@@ -121,7 +115,7 @@ function renderArray(
     lines.push("");
     lines.push(...renderSchema(spec, items));
   } else {
-    const itemType = formatPrimitiveType(items);
+    const itemType = formatPrimitiveType(spec, items);
     lines.push(`Array of ${itemType}`);
   }
 
@@ -150,7 +144,7 @@ function renderMap(
     lines.push("");
     lines.push(...renderSchema(spec, valueSchema));
   } else {
-    lines.push(`Map of string to ${formatPrimitiveType(valueSchema)}`);
+    lines.push(`Map of string to ${formatPrimitiveType(spec, valueSchema)}`);
   }
   return lines;
 }
@@ -165,37 +159,74 @@ function renderObject(
     return lines;
   }
 
-  const rows = flattenProperties(spec, schema.properties, schema.required, "");
-  if (rows.length === 0) return lines;
-
-  const tableRows: TableRow[] = rows.map((row) => ({
-    cells: [row.name, row.type, row.description],
-  }));
-
-  lines.push(...listTable(["Name", "Type", "Description"], tableRows));
+  const rows = flattenProperties(
+    spec,
+    schema.properties,
+    schema.required,
+    "",
+    0,
+    new Set([schema]),
+  );
+  lines.push(...fieldTable(rows));
   return lines;
+}
+
+/** Whether a schema describes an object whose properties can be listed. */
+function isObjectLike(schema: Schema): boolean {
+  return schema.type === "object" || !!schema.properties || !!schema.allOf;
+}
+
+/** The properties of an object-like schema, with `allOf` merged. */
+function objectFields(spec: OpenAPISpec, schema: Schema): Schema {
+  return schema.allOf ? mergeAllOf(spec, schema.allOf) : schema;
 }
 
 /**
  * Flatten object properties into rows, recursing into nested objects
- * with indented dotted path names.
+ * with dotted path names.
+ *
+ * `ancestors` holds the schemas being expanded on the way here. A property
+ * whose schema is already among them gets its own row but no child rows, so a
+ * recursive schema renders once instead of forever.
  */
 function flattenProperties(
   spec: OpenAPISpec,
   properties: Record<string, Schema | Reference>,
-  required?: string[],
-  prefix: string = "",
-  depth: number = 0,
-): PropertyRow[] {
-  const rows: PropertyRow[] = [];
+  required: string[] | undefined,
+  prefix: string,
+  depth: number,
+  ancestors: ReadonlySet<Schema>,
+): FieldRow[] {
+  const rows: FieldRow[] = [];
   const requiredSet = new Set(required || []);
+
+  /** Rows for the properties of `schema`, nested under `path`. */
+  const children = (schema: Schema, path: string): FieldRow[] => {
+    if (ancestors.has(schema)) return [];
+    const fields = objectFields(spec, schema);
+    if (!fields.properties) return [];
+    return flattenProperties(
+      spec,
+      fields.properties,
+      fields.required,
+      path,
+      depth + 1,
+      new Set([...ancestors, schema]),
+    );
+  };
 
   for (const [name, prop] of Object.entries(properties)) {
     const resolved = isReference(prop) ? resolve<Schema>(spec, prop) : prop;
     const displayName = prefix ? `${prefix}.${name}` : name;
-    const nameCell = depth > 0
-      ? `[\`${displayName}\`]{.schema-nest-${depth}}`
-      : `\`${displayName}\``;
+    const row = (type: string, attributes: string): FieldRow => ({
+      name: displayName,
+      depth,
+      type,
+      description: resolved.description?.trim() ?? "",
+      attributes,
+    });
+    const attributes = attributesOf(resolved, requiredSet.has(name));
+    const alternative = soleAlternative(spec, resolved);
 
     if (
       (resolved.type === "object" || resolved.properties) &&
@@ -203,68 +234,31 @@ function flattenProperties(
       !resolved.allOf
     ) {
       // Nested object: emit a row for the object itself, then recurse
-      rows.push({
-        name: nameCell,
-        type: "`object`",
-        description: resolved.description || "",
-      });
-      rows.push(
-        ...flattenProperties(
-          spec,
-          resolved.properties,
-          resolved.required,
-          displayName,
-          depth + 1,
-        ),
-      );
+      rows.push(row("object", ""));
+      rows.push(...children(resolved, displayName));
     } else if (resolved.allOf) {
       const merged = mergeAllOf(spec, resolved.allOf);
       rows.push({
-        name: nameCell,
-        type: "`object`",
-        description: resolved.description || merged.description || "",
+        ...row("object", ""),
+        description:
+          (resolved.description || merged.description || "").trim(),
       });
-      if (merged.properties) {
-        rows.push(
-          ...flattenProperties(
-            spec,
-            merged.properties,
-            merged.required,
-            displayName,
-            depth + 1,
-          ),
-        );
-      }
+      rows.push(...children(resolved, displayName));
+    } else if (alternative && isObjectLike(alternative)) {
+      // A nullable reference, `anyOf: [{ $ref }, { nullable: true }]`: list
+      // the referenced object's properties as if it were a nested object.
+      rows.push(row(formatTypeString(spec, resolved), attributes));
+      rows.push(...children(alternative, displayName));
     } else if (resolved.type === "array" && resolved.items) {
       const items = isReference(resolved.items)
         ? resolve<Schema>(spec, resolved.items)
         : resolved.items;
 
-      if (items.type === "object" || items.properties || items.allOf) {
-        rows.push({
-          name: nameCell,
-          type: "`[object]`",
-          description: buildDescription(resolved, requiredSet.has(name)),
-        });
-        const effective = items.allOf ? mergeAllOf(spec, items.allOf) : items;
-        if (effective.properties) {
-          rows.push(
-            ...flattenProperties(
-              spec,
-              effective.properties,
-              effective.required,
-              `${displayName}[]`,
-              depth + 1,
-            ),
-          );
-        }
+      if (isObjectLike(items)) {
+        rows.push(row("[object]", attributes));
+        rows.push(...children(items, `${displayName}[]`));
       } else {
-        const itemType = items.type || "unknown";
-        rows.push({
-          name: nameCell,
-          type: `\`[${itemType}]\``,
-          description: buildDescription(resolved, requiredSet.has(name)),
-        });
+        rows.push(row(`[${typeLabel(spec, items)}]`, attributes));
       }
     } else if (
       !resolved.properties &&
@@ -274,40 +268,15 @@ function flattenProperties(
       // Typed map: additionalProperties is a schema, $ref, or `true`.
       const ap = resolved.additionalProperties;
       const valueType = mapValueTypeLabel(spec, ap);
-      rows.push({
-        name: nameCell,
-        type: `\`map[string, ${valueType}]\``,
-        description: buildDescription(resolved, requiredSet.has(name)),
-      });
+      rows.push(row(`map[string, ${valueType}]`, attributes));
       if (ap !== true) {
         const valueSchema = isReference(ap) ? resolve<Schema>(spec, ap) : ap;
-        if (
-          valueSchema.type === "object" ||
-          valueSchema.properties ||
-          valueSchema.allOf
-        ) {
-          const effective = valueSchema.allOf
-            ? mergeAllOf(spec, valueSchema.allOf)
-            : valueSchema;
-          if (effective.properties) {
-            rows.push(
-              ...flattenProperties(
-                spec,
-                effective.properties,
-                effective.required,
-                `${displayName}{}`,
-                depth + 1,
-              ),
-            );
-          }
+        if (isObjectLike(valueSchema)) {
+          rows.push(...children(valueSchema, `${displayName}{}`));
         }
       }
     } else {
-      rows.push({
-        name: nameCell,
-        type: `\`${formatTypeString(resolved)}\``,
-        description: buildDescription(resolved, requiredSet.has(name)),
-      });
+      rows.push(row(formatTypeString(spec, resolved), attributes));
     }
   }
 
@@ -315,15 +284,10 @@ function flattenProperties(
 }
 
 /**
- * Build a description string including property attributes.
+ * The attribute sentences shown after a field's description, such as
+ * "Required. Example: `x`.", or "" when the field has none.
  */
-function buildDescription(schema: Schema, isRequired: boolean): string {
-  const parts: string[] = [];
-
-  if (schema.description) {
-    parts.push(schema.description.trim());
-  }
-
+function attributesOf(schema: Schema, isRequired: boolean): string {
   const attrs: string[] = [];
   if (isRequired) attrs.push("Required");
   if (schema.readOnly) attrs.push("Read-only");
@@ -339,12 +303,7 @@ function buildDescription(schema: Schema, isRequired: boolean): string {
   if (schema.example !== undefined)
     attrs.push(`Example: \`${formatValue(schema.example)}\``);
 
-  if (attrs.length > 0) {
-    if (parts.length > 0) parts.push("");
-    parts.push(attrs.join(". ") + ".");
-  }
-
-  return parts.join("\n");
+  return attrs.length > 0 ? attrs.join(". ") + "." : "";
 }
 
 const semanticFormats = new Set(["date-time", "date", "time", "duration", "uuid", "uri", "uri-reference", "email", "hostname", "ipv4", "ipv6", "byte", "binary", "password"]);
@@ -356,27 +315,82 @@ function mapValueTypeLabel(
   if (value === true) return "any";
   if (value === false) return "object";
   if (isReference(value)) {
-    return value.$ref.split("/").pop() || "object";
+    return refName(value);
   }
   if (value.type === "object" || value.properties || value.allOf) return "object";
   return value.type || "object";
 }
 
-function formatTypeString(schema: Schema): string {
-  let type = schema.type || "unknown";
+function refName(ref: Reference): string {
+  return ref.$ref.split("/").pop() || "object";
+}
+
+/**
+ * Whether a schema only marks its parent as nullable, like the second member
+ * of `anyOf: [{ $ref }, { nullable: true }]`.
+ */
+function isNullMarker(schema: Schema | Reference): boolean {
+  if (isReference(schema)) return false;
+  if (schema.type === "null") return true;
+  return (
+    schema.nullable === true &&
+    Object.keys(schema).every((k) => k === "nullable" || k === "description")
+  );
+}
+
+/**
+ * The one schema an `anyOf` or `oneOf` allows besides null, or undefined when
+ * there is no such composition or it has more than one alternative.
+ */
+function soleAlternative(spec: OpenAPISpec, schema: Schema): Schema | undefined {
+  const members = schema.anyOf ?? schema.oneOf;
+  if (!members) return undefined;
+  const alternatives = members.filter((m) => !isNullMarker(m));
+  if (alternatives.length !== 1) return undefined;
+  const [only] = alternatives;
+  return isReference(only) ? resolve<Schema>(spec, only) : only;
+}
+
+/**
+ * A short name for the type a schema allows: the schema name for a `$ref`,
+ * the alternatives joined by `|` for `anyOf`/`oneOf`, and `any` for a schema
+ * that does not constrain the type.
+ */
+function typeLabel(spec: OpenAPISpec, schema: Schema | Reference): string {
+  if (isReference(schema)) return refName(schema);
+  if (schema.type) return schema.type;
+  if (schema.allOf) {
+    return schema.allOf.length === 1
+      ? typeLabel(spec, schema.allOf[0])
+      : "object";
+  }
+  const members = schema.anyOf ?? schema.oneOf;
+  if (members) {
+    const labels = members.map((m) =>
+      isNullMarker(m) ? "null" : typeLabel(spec, m),
+    );
+    return [...new Set(labels)].join("|");
+  }
+  if (schema.properties || schema.additionalProperties) return "object";
+  if (schema.items) return "array";
+  return "any";
+}
+
+function formatTypeString(spec: OpenAPISpec, schema: Schema): string {
+  let type = typeLabel(spec, schema);
 
   if (schema.format && semanticFormats.has(schema.format)) {
     type = `${type} (${schema.format})`;
   }
-  if (schema.nullable) {
+  if (schema.nullable && !type.split("|").includes("null")) {
     type = `${type}|null`;
   }
 
   return type;
 }
 
-function formatPrimitiveType(schema: Schema): string {
-  const parts = [schema.type || "unknown"];
+function formatPrimitiveType(spec: OpenAPISpec, schema: Schema): string {
+  const parts = [typeLabel(spec, schema)];
   if (schema.format && semanticFormats.has(schema.format)) parts.push(`(${schema.format})`);
   return parts.join(" ");
 }
