@@ -159,14 +159,7 @@ function renderObject(
     return lines;
   }
 
-  const rows = flattenProperties(
-    spec,
-    schema.properties,
-    schema.required,
-    "",
-    0,
-    new Set([schema]),
-  );
+  const rows = flattenProperties(spec, schema.properties, schema.required, "", 0);
   lines.push(...fieldTable(rows));
   return lines;
 }
@@ -184,10 +177,6 @@ function objectFields(spec: OpenAPISpec, schema: Schema): Schema {
 /**
  * Flatten object properties into rows, recursing into nested objects
  * with dotted path names.
- *
- * `ancestors` holds the schemas being expanded on the way here. A property
- * whose schema is already among them gets its own row but no child rows, so a
- * recursive schema renders once instead of forever.
  */
 function flattenProperties(
   spec: OpenAPISpec,
@@ -195,14 +184,12 @@ function flattenProperties(
   required: string[] | undefined,
   prefix: string,
   depth: number,
-  ancestors: ReadonlySet<Schema>,
 ): FieldRow[] {
   const rows: FieldRow[] = [];
   const requiredSet = new Set(required || []);
 
   /** Rows for the properties of `schema`, nested under `path`. */
   const children = (schema: Schema, path: string): FieldRow[] => {
-    if (ancestors.has(schema)) return [];
     const fields = objectFields(spec, schema);
     if (!fields.properties) return [];
     return flattenProperties(
@@ -211,7 +198,6 @@ function flattenProperties(
       fields.required,
       path,
       depth + 1,
-      new Set([...ancestors, schema]),
     );
   };
 
@@ -315,14 +301,10 @@ function mapValueTypeLabel(
   if (value === true) return "any";
   if (value === false) return "object";
   if (isReference(value)) {
-    return refName(value);
+    return value.$ref.split("/").pop() || "object";
   }
   if (value.type === "object" || value.properties || value.allOf) return "object";
   return value.type || "object";
-}
-
-function refName(ref: Reference): string {
-  return ref.$ref.split("/").pop() || "object";
 }
 
 /**
@@ -352,12 +334,12 @@ function soleAlternative(spec: OpenAPISpec, schema: Schema): Schema | undefined 
 }
 
 /**
- * A short name for the type a schema allows: the schema name for a `$ref`,
- * the alternatives joined by `|` for `anyOf`/`oneOf`, and `any` for a schema
- * that does not constrain the type.
+ * A short name for the type a schema allows: its `type`, `object` for an
+ * object, the alternatives joined by `|` for `anyOf`/`oneOf`, and `any` for a
+ * schema that does not constrain the type.
  */
 function typeLabel(spec: OpenAPISpec, schema: Schema | Reference): string {
-  if (isReference(schema)) return refName(schema);
+  if (isReference(schema)) return typeLabel(spec, resolve<Schema>(spec, schema));
   if (schema.type) return schema.type;
   if (schema.allOf) {
     return schema.allOf.length === 1

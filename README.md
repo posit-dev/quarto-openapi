@@ -126,9 +126,9 @@ Schema tables handle:
 - Nested objects: flattened as indented dotted rows (e.g., `owner.guid`)
 - Arrays of objects: expanded inline with their properties
 - `allOf` composition: merged into a single property table
-- `anyOf`/`oneOf` composition: typed by the alternatives' names joined with `|`
-  (`Owner|null`, `Cat|Dog`); a nullable reference to an object also lists the
-  object's properties
+- `anyOf`/`oneOf` composition: typed by the alternatives joined with `|`
+  (`object|null`, `string|integer`); a nullable object also lists the object's
+  properties
 - Property attributes: required, read-only, nullable, default, minimum/maximum, enum, example, format
 
 ### Field tables and `llms-txt`

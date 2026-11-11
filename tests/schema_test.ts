@@ -431,7 +431,7 @@ test("renderSchema: enum values go through the same formatter as defaults", () =
   assertStringIncludes(output, 'Enum: `""`, `fast`, `null`');
 });
 
-test("renderSchema: a nullable reference is named and expanded", () => {
+test("renderSchema: a nullable reference is typed and expanded", () => {
   const spec = specWithSchemas({
     Source: {
       type: "object",
@@ -441,22 +441,28 @@ test("renderSchema: a nullable reference is named and expanded", () => {
         gitUrl: { type: "string" },
       },
     },
-  });
-  const output = rendered(spec, {
-    type: "object",
-    required: ["source"],
-    properties: {
-      source: {
-        description: "Where the source lives.",
-        anyOf: [
-          { $ref: "#/components/schemas/Source" } as unknown as Schema,
-          { nullable: true },
-        ],
+    Values: {
+      type: "object",
+      required: ["source"],
+      properties: {
+        source: {
+          description: "Where the source lives.",
+          anyOf: [
+            { $ref: "#/components/schemas/Source" } as unknown as Schema,
+            { nullable: true },
+          ],
+        },
       },
     },
   });
+  // Through a $ref, as request and response bodies usually are: every
+  // nested $ref is expanded before the table is built.
+  const output = rendered(
+    spec,
+    { $ref: "#/components/schemas/Values" } as unknown as Schema,
+  );
 
-  assertStringIncludes(output, "* * `source`\n  * `Source|null`");
+  assertStringIncludes(output, "* * `source`\n  * `object|null`");
   assertStringIncludes(output, "[Where the source lives.]{.schema-para}");
   assertStringIncludes(output, "[Required.]{.schema-attrs}");
   assertStringIncludes(output, "* * [`source.choice`]{.schema-nest-1}");
@@ -465,25 +471,23 @@ test("renderSchema: a nullable reference is named and expanded", () => {
 });
 
 test("renderSchema: alternatives are joined with |", () => {
-  const spec = specWithSchemas({
-    Cat: { type: "object", properties: { purrs: { type: "boolean" } } },
-    Dog: { type: "object", properties: { barks: { type: "boolean" } } },
-  });
-  const output = rendered(spec, {
+  const output = rendered(specWithSchemas(), {
     type: "object",
     properties: {
+      id: { anyOf: [{ type: "string" }, { type: "integer" }] },
+      label: { oneOf: [{ type: "string" }, { nullable: true }] },
       pet: {
         oneOf: [
-          { $ref: "#/components/schemas/Cat" } as unknown as Schema,
-          { $ref: "#/components/schemas/Dog" } as unknown as Schema,
+          { type: "object", properties: { purrs: { type: "boolean" } } },
+          { type: "object", properties: { barks: { type: "boolean" } } },
         ],
       },
-      id: { anyOf: [{ type: "string" }, { type: "integer" }] },
     },
   });
 
-  assertStringIncludes(output, "* * `pet`\n  * `Cat|Dog`");
   assertStringIncludes(output, "* * `id`\n  * `string|integer`");
+  assertStringIncludes(output, "* * `label`\n  * `string|null`");
+  assertStringIncludes(output, "* * `pet`\n  * `object`");
   // Neither alternative is listed as if it were the only one.
   assertFalse(output.includes("pet.purrs"), output);
 });
@@ -496,7 +500,7 @@ test("renderSchema: a schema with no type constraint is any", () => {
   assertStringIncludes(output, "* * `value`\n  * `any`");
 });
 
-test("renderSchema: a recursive nullable reference expands once", () => {
+test("renderSchema: a recursive nullable reference ends at the cycle", () => {
   const spec = specWithSchemas({
     Expr: {
       type: "object",
@@ -508,20 +512,28 @@ test("renderSchema: a recursive nullable reference expands once", () => {
         },
       },
     },
-  });
-  const output = rendered(spec, {
-    type: "object",
-    properties: {
-      visible: {
-        anyOf: [
-          { $ref: "#/components/schemas/Expr" } as unknown as Schema,
-          { nullable: true },
-        ],
+    Field: {
+      type: "object",
+      properties: {
+        visible: {
+          anyOf: [
+            { $ref: "#/components/schemas/Expr" } as unknown as Schema,
+            { nullable: true },
+          ],
+        },
       },
     },
   });
+  const output = rendered(
+    spec,
+    { $ref: "#/components/schemas/Field" } as unknown as Schema,
+  );
 
-  assertStringIncludes(output, "* * `visible`\n  * `Expr|null`");
-  assertStringIncludes(output, "[`visible.operands`]{.schema-nest-1}");
-  assertFalse(output.includes("visible.operands[].operator"), output);
+  assertStringIncludes(output, "* * `visible`\n  * `object|null`");
+  assertStringIncludes(output, "[`visible.operator`]{.schema-nest-1}");
+  // The cycle ends where the reference repeats.
+  assertStringIncludes(
+    output,
+    "* * [`visible.operands`]{.schema-nest-1}\n  * `[any]`",
+  );
 });
