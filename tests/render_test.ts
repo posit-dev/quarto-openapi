@@ -170,6 +170,45 @@ test("renderSection: parameters rendered as grid table", () => {
   assertStringIncludes(output, "Max items");
 });
 
+test("renderSection: parameter types and attributes come from the schema", () => {
+  const spec = minimalSpec({
+    "/v1/pets": {
+      get: {
+        operationId: "listPets",
+        summary: "List pets",
+        parameters: [
+          {
+            name: "id",
+            in: "query",
+            schema: { anyOf: [{ type: "integer" }, { type: "string" }] },
+          },
+          {
+            name: "tag",
+            in: "query",
+            required: true,
+            schema: { oneOf: [{ type: "string" }, { nullable: true }] },
+          },
+          {
+            name: "size",
+            in: "query",
+            schema: { type: "integer", format: "int64", enum: [1, 2], default: 1 },
+          },
+        ],
+        responses: { "200": { description: "OK" } },
+      },
+    },
+  });
+
+  const output = renderedSection(spec);
+
+  assertStringIncludes(output, "* * `id`\n  * `integer|string`");
+  assertStringIncludes(output, "* * `tag`\n  * `string|null`\n  * Required.");
+  assertStringIncludes(
+    output,
+    "* * `size`\n  * `integer (int64)`\n  * Default: `1`. Enum: `1`, `2`.",
+  );
+});
+
 test("renderSection: parameters heading has scoped anchor ID", () => {
   const spec = minimalSpec({
     "/v1/pets": {

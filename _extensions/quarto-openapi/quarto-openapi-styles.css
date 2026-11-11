@@ -26,18 +26,3 @@
 .schema-nest-2 { padding-left: 2em; }
 .schema-nest-3 { padding-left: 3em; }
 .schema-nest-4 { padding-left: 4em; }
-
-/*
- * Field descriptions are one paragraph of spans, so that `.llms.md` can keep
- * the table (see lib/fields.ts). These spans lay out as the paragraphs they
- * stand for.
- */
-.schema-para,
-.schema-attrs {
-  display: block;
-}
-
-.schema-para + .schema-para,
-.schema-para + .schema-attrs {
-  margin-top: 0.5em;
-}

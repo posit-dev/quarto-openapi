@@ -462,9 +462,10 @@ test("renderSchema: a nullable reference is typed and expanded", () => {
     { $ref: "#/components/schemas/Values" } as unknown as Schema,
   );
 
-  assertStringIncludes(output, "* * `source`\n  * `object|null`");
-  assertStringIncludes(output, "[Where the source lives.]{.schema-para}");
-  assertStringIncludes(output, "[Required.]{.schema-attrs}");
+  assertStringIncludes(
+    output,
+    "* * `source`\n\n  * `object|null`\n\n  * Where the source lives.\n\n    Required.",
+  );
   assertStringIncludes(output, "* * [`source.choice`]{.schema-nest-1}");
   assertStringIncludes(output, "* * [`source.gitUrl`]{.schema-nest-1}");
   assertFalse(output.includes("unknown"), output);
@@ -531,9 +532,110 @@ test("renderSchema: a recursive nullable reference ends at the cycle", () => {
 
   assertStringIncludes(output, "* * `visible`\n  * `object|null`");
   assertStringIncludes(output, "[`visible.operator`]{.schema-nest-1}");
-  // The cycle ends where the reference repeats.
+  // The cycle ends where the reference repeats, named by the schema.
   assertStringIncludes(
     output,
-    "* * [`visible.operands`]{.schema-nest-1}\n  * `[any]`",
+    "* * [`visible.operands`]{.schema-nest-1}\n  * `[Expr]`",
   );
+});
+
+test("renderSchema: allOf around a primitive keeps its type and enum", () => {
+  const spec = specWithSchemas({
+    Status: { type: "string", enum: ["on", "off"] },
+  });
+  const output = rendered(spec, {
+    type: "object",
+    required: ["status"],
+    properties: {
+      status: {
+        description: "Current status.",
+        allOf: [{ $ref: "#/components/schemas/Status" } as unknown as Schema],
+      },
+    },
+  });
+
+  assertStringIncludes(output, "* * `status`\n\n  * `string`");
+  assertStringIncludes(output, "Current status.\n\n    Required. Enum: `on`, `off`.");
+});
+
+test("renderSchema: object rows carry attributes and nullability", () => {
+  const spec = specWithSchemas({
+    Owner: { type: "object", properties: { guid: { type: "string" } } },
+  });
+  const owner = { $ref: "#/components/schemas/Owner" } as unknown as Schema;
+  const output = rendered(spec, {
+    type: "object",
+    required: ["owner"],
+    properties: {
+      owner,
+      backup: { allOf: [owner], nullable: true },
+    },
+  });
+
+  assertStringIncludes(output, "* * `owner`\n  * `object`\n  * Required.");
+  assertStringIncludes(output, "* * `backup`\n  * `object|null`");
+  assertStringIncludes(output, "[`backup.guid`]{.schema-nest-1}");
+});
+
+test("renderSchema: alternative members contribute their own null", () => {
+  const output = rendered(specWithSchemas(), {
+    type: "object",
+    properties: {
+      id: { anyOf: [{ type: "string", nullable: true }, { type: "integer" }] },
+      tags: {
+        anyOf: [{ type: "array", items: { type: "string" } }, { nullable: true }],
+      },
+      counts: {
+        type: "object",
+        additionalProperties: { anyOf: [{ type: "string" }, { type: "integer" }] },
+      },
+    },
+  });
+
+  assertStringIncludes(output, "* * `id`\n  * `string|null|integer`");
+  assertStringIncludes(output, "* * `tags`\n  * `[string]|null`");
+  assertStringIncludes(output, "* * `counts`\n  * `map[string, string|integer]`");
+});
+
+test("renderSchema: a nullable array of references lists the item fields", () => {
+  const spec = specWithSchemas({
+    Tag: { type: "object", properties: { label: { type: "string" } } },
+  });
+  const output = rendered(spec, {
+    type: "object",
+    properties: {
+      tags: {
+        anyOf: [
+          {
+            type: "array",
+            items: { $ref: "#/components/schemas/Tag" } as unknown as Schema,
+          },
+          { nullable: true },
+        ],
+      },
+    },
+  });
+
+  assertStringIncludes(output, "* * `tags`\n  * `[object]|null`");
+  assertStringIncludes(output, "[`tags[].label`]{.schema-nest-1}");
+});
+
+test("renderSchema: a top-level oneOf renders each alternative", () => {
+  const spec = specWithSchemas({
+    Cat: { type: "object", properties: { purrs: { type: "boolean" } } },
+    Dog: { type: "object", properties: { barks: { type: "boolean" } } },
+  });
+  const output = rendered(spec, {
+    oneOf: [
+      { $ref: "#/components/schemas/Cat" } as unknown as Schema,
+      { $ref: "#/components/schemas/Dog" } as unknown as Schema,
+      { nullable: true },
+    ],
+  });
+
+  const purrs = output.indexOf("`purrs`");
+  const or = output.indexOf("\nOr:\n");
+  const barks = output.indexOf("`barks`");
+  assert(purrs > 0 && or > purrs && barks > or, output);
+  assertStringIncludes(output, "Or `null`.");
 });

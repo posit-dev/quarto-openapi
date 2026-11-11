@@ -59,9 +59,11 @@ async function render(markdown: string): Promise<string> {
 
 /**
  * Render `markdown` as the only page of a website with `llms-txt` on, and
- * return the `.llms.md` Quarto derives from the page's HTML.
+ * return the page's HTML and the `.llms.md` Quarto derives from it.
  */
-async function renderLlms(markdown: string): Promise<string> {
+async function renderSite(
+  markdown: string,
+): Promise<{ html: string; llms: string }> {
   const dir = await mkdtemp(join(tmpdir(), "quarto-openapi-llms-"));
   try {
     await writeFile(
@@ -70,7 +72,10 @@ async function renderLlms(markdown: string): Promise<string> {
     );
     await writeFile(join(dir, "index.qmd"), markdown);
     await execFileAsync("quarto", ["render"], { cwd: dir });
-    return await readFile(join(dir, "_site", "index.llms.md"), "utf8");
+    return {
+      html: await readFile(join(dir, "_site", "index.html"), "utf8"),
+      llms: await readFile(join(dir, "_site", "index.llms.md"), "utf8"),
+    };
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -194,6 +199,13 @@ test("A field table survives into llms-txt output", { skip }, async () => {
         attributes: "",
       },
       {
+        name: "note",
+        depth: 0,
+        type: "string",
+        description: "Line one`<br>`{=html}line two.",
+        attributes: "",
+      },
+      {
         name: "owner.name",
         depth: 1,
         type: "string",
@@ -204,19 +216,25 @@ test("A field table survives into llms-txt output", { skip }, async () => {
     "",
   ].join("\n");
 
-  const llms = await renderLlms(markdown);
+  const { html, llms } = await renderSite(markdown);
 
   assertEquals(llms.includes("[TABLE]"), false, `table dropped:\n${llms}`);
   assertStringIncludes(
     llms,
-    "| `guid` | `string` | The identifier. Assigned by the server. " +
-      "Required. Example: `abc`. |",
+    "- `guid` (`string`)\n\n  The identifier.\n\n  Assigned by the server." +
+      "\n\n  Required. Example: `abc`.",
   );
   assertStringIncludes(
     llms,
-    "| `mode` | `string` | How it runs: Continued below the table. |",
+    "- `mode` (`string`)\n\n  How it runs:\n\n  - `fast`: skips checks\n" +
+      "  - `safe`: checks first",
   );
-  assertStringIncludes(llms, "| `owner.name` | `string` | Read-only. |");
-  assertStringIncludes(llms, "- `fast`: skips checks");
-  assertStringIncludes(llms, "- `safe`: checks first");
+  assertStringIncludes(llms, "- `note` (`string`)\n\n  Line one  \n  line two.");
+  assertStringIncludes(llms, "- `owner.name` (`string`)\n\n  Read-only.");
+
+  // The page keeps the table, with the list inside its row, and nothing of
+  // the llms-txt form.
+  const table = tableOf(html);
+  assertStringIncludes(table, "<li><code>fast</code>: skips checks</li>");
+  assertEquals(html.includes("(<code>string</code>)"), false, html);
 });

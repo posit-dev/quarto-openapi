@@ -41,8 +41,11 @@ export function expandRefs<T>(
   if (isReference(obj)) {
     const ref = obj.$ref;
     if (seen.has(ref)) {
-      // Circular reference — return a stub to avoid infinite recursion
-      return { description: `(circular reference: ${ref})` } as T;
+      // Circular reference: a stub that names the schema it would repeat.
+      return {
+        description: `(circular reference: ${ref})`,
+        "x-circular-ref": ref,
+      } as T;
     }
     const resolved = resolveRef(spec, ref);
     if (resolved === undefined) {

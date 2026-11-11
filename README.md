@@ -128,7 +128,7 @@ Schema tables handle:
 - `allOf` composition: merged into a single property table
 - `anyOf`/`oneOf` composition: typed by the alternatives joined with `|`
   (`object|null`, `string|integer`); a nullable object also lists the object's
-  properties
+  properties, and a request or response body lists each alternative in turn
 - Property attributes: required, read-only, nullable, default, minimum/maximum, enum, example, format
 
 ### Field tables and `llms-txt`
@@ -137,12 +137,11 @@ Quarto builds each `.llms.md` page from the rendered HTML with Pandoc's GFM
 writer. A GFM table cell holds inline content only, so Pandoc writes `[TABLE]`
 in place of any table with a paragraph break, list or line break in a cell.
 
-To keep every table, each Description cell is a single paragraph. A
-description's paragraphs and the field's attributes become spans that the
-extension's stylesheet lays out as separate lines, so the HTML reads as
-paragraphs and the GFM conversion sees one. Content that cannot be inline, such
-as a list or a code block, is listed under the table with the field's name, and
-the cell says "Continued below the table."
+Each field table is therefore emitted twice, inside
+`content-hidden`/`content-visible` blocks with `when-format="llms-txt"`: the
+table for the HTML page, and a bullet list with one item per field for
+`.llms.md`, where descriptions keep their paragraphs, lists and code blocks.
+Quarto removes the list from the HTML page and its search index.
 
 ## Project structure
 

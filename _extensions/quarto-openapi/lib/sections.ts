@@ -15,7 +15,7 @@ import type {
 } from "./types.ts";
 import { HTTP_METHODS, isReference } from "./types.ts";
 import { resolve } from "./refs.ts";
-import { renderSchema } from "./schema.ts";
+import { attributesOf, formatTypeString, renderSchema } from "./schema.ts";
 import { stripCode } from "./escape.ts";
 import {
   autoIdentifier,
@@ -526,18 +526,12 @@ function renderParameters(
       const schema = param.schema
         ? resolve<Schema>(spec, param.schema)
         : undefined;
-
-      const typeParts: string[] = [];
-      if (schema?.type) typeParts.push(schema.type);
-      if (schema?.format) typeParts.push(`(${schema.format})`);
-      const typeStr = typeParts.length > 0 ? typeParts.join(" ") : "string";
-
       return {
         name: param.name,
         depth: 0,
-        type: typeStr,
-        description: param.description?.trim() ?? "",
-        attributes: param.required ? "Required." : "",
+        type: schema ? formatTypeString(spec, schema, true) : "string",
+        description: param.description ?? "",
+        attributes: attributesOf(schema ?? {}, !!param.required),
       };
     });
 
