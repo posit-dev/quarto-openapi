@@ -229,7 +229,12 @@ test("A field table survives into llms-txt output", { skip }, async () => {
     "- `mode` (`string`)\n\n  How it runs:\n\n  - `fast`: skips checks\n" +
       "  - `safe`: checks first",
   );
-  assertStringIncludes(llms, "- `note` (`string`)\n\n  Line one  \n  line two.");
+  // Pandoc writes a hard line break as trailing spaces or as a backslash,
+  // depending on its version.
+  assert(
+    /- `note` \(`string`\)\n\n {2}Line one(?: {2,}|\\)\n {2}line two\./.test(llms),
+    `line break lost:\n${llms}`,
+  );
   assertStringIncludes(llms, "- `owner.name` (`string`)\n\n  Read-only.");
 
   // The page keeps the table, with the list inside its row, and nothing of
