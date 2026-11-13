@@ -112,6 +112,8 @@ export interface Schema {
   maxLength?: number;
   pattern?: string;
   additionalProperties?: boolean | Schema | Reference;
+  /** Set by expandRefs on the stub that ends a circular `$ref`. */
+  "x-circular-ref"?: string;
 }
 
 export interface Reference {

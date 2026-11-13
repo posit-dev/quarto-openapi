@@ -18,6 +18,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { assert, assertEquals, assertStringIncludes } from "./assert.ts";
 import { listTable } from "../_extensions/quarto-openapi/lib/markdown.ts";
+import { fieldTable } from "../_extensions/quarto-openapi/lib/fields.ts";
 import { escapePathBracesOutsideCode } from "../_extensions/quarto-openapi/lib/escape.ts";
 
 const execFileAsync = promisify(execFile);
@@ -51,6 +52,30 @@ async function render(markdown: string): Promise<string> {
       "page.html",
     ], { cwd: dir });
     return await readFile(join(dir, "page.html"), "utf8");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Render `markdown` as the only page of a website with `llms-txt` on, and
+ * return the page's HTML and the `.llms.md` Quarto derives from it.
+ */
+async function renderSite(
+  markdown: string,
+): Promise<{ html: string; llms: string }> {
+  const dir = await mkdtemp(join(tmpdir(), "quarto-openapi-llms-"));
+  try {
+    await writeFile(
+      join(dir, "_quarto.yml"),
+      "project:\n  type: website\nwebsite:\n  title: Test\n  llms-txt: true\n",
+    );
+    await writeFile(join(dir, "index.qmd"), markdown);
+    await execFileAsync("quarto", ["render"], { cwd: dir });
+    return {
+      html: await readFile(join(dir, "_site", "index.html"), "utf8"),
+      llms: await readFile(join(dir, "_site", "index.llms.md"), "utf8"),
+    };
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -148,4 +173,73 @@ test("Quarto renders a fenced cell and escaped braces verbatim", { skip }, async
   assertStringIncludes(table, "/v1/widgets/{widget-id}");
   assertStringIncludes(table, "GET /v1/widgets/{widget-id}/keys/{key2}.");
   assertEquals(table.includes("\\{"), false, `braces left escaped:\n${table}`);
+});
+
+test("A field table survives into llms-txt output", { skip }, async () => {
+  // Quarto converts the rendered HTML to GFM for `.llms.md`, and Pandoc writes
+  // `[TABLE]` for any table with block content in a cell.
+  const markdown = [
+    "---",
+    "title: Fields",
+    "---",
+    "",
+    ...fieldTable([
+      {
+        name: "guid",
+        depth: 0,
+        type: "string",
+        description: "The identifier.\n\nAssigned by the server.",
+        attributes: "Required. Example: `abc`.",
+      },
+      {
+        name: "mode",
+        depth: 0,
+        type: "string",
+        description: "How it runs:\n\n- `fast`: skips checks\n- `safe`: checks first",
+        attributes: "",
+      },
+      {
+        name: "note",
+        depth: 0,
+        type: "string",
+        description: "Line one`<br>`{=html}line two.",
+        attributes: "",
+      },
+      {
+        name: "owner.name",
+        depth: 1,
+        type: "string",
+        description: "",
+        attributes: "Read-only.",
+      },
+    ]),
+    "",
+  ].join("\n");
+
+  const { html, llms } = await renderSite(markdown);
+
+  assertEquals(llms.includes("[TABLE]"), false, `table dropped:\n${llms}`);
+  assertStringIncludes(
+    llms,
+    "- `guid` (`string`)\n\n  The identifier.\n\n  Assigned by the server." +
+      "\n\n  Required. Example: `abc`.",
+  );
+  assertStringIncludes(
+    llms,
+    "- `mode` (`string`)\n\n  How it runs:\n\n  - `fast`: skips checks\n" +
+      "  - `safe`: checks first",
+  );
+  // Pandoc writes a hard line break as trailing spaces or as a backslash,
+  // depending on its version.
+  assert(
+    /- `note` \(`string`\)\n\n {2}Line one(?: {2,}|\\)\n {2}line two\./.test(llms),
+    `line break lost:\n${llms}`,
+  );
+  assertStringIncludes(llms, "- `owner.name` (`string`)\n\n  Read-only.");
+
+  // The page keeps the table, with the list inside its row, and nothing of
+  // the llms-txt form.
+  const table = tableOf(html);
+  assertStringIncludes(table, "<li><code>fast</code>: skips checks</li>");
+  assertEquals(html.includes("(<code>string</code>)"), false, html);
 });
